@@ -17,6 +17,10 @@ def to_forecast_input(fin, cfg):
     opex = (a.get("gastosVariables", 0.0) + a.get("costosFijos", 0.0))
     opex_pct = (opex / a["ventas"]) if a.get("ventas") else 0.0
     fin_cfg = cfg.get("finance", cfg)  # tolerate flat or nested config
+    # weekly cash-flow inputs must reflect the RUN-RATE, not the YTD total: annualize
+    # YTD figures by active months so a partial year doesn't understate the projection.
+    ann = (12.0 / active) if active else 1.0
+    def _weekly(x): return x * ann / 52.0
     return {
         "historical_periods": [{"revenue": v} for v in ventas],
         "drivers": {"units": {}, "pricing": {}},
@@ -27,11 +31,11 @@ def to_forecast_input(fin, cfg):
         },
         "cash_flow_inputs": {
             "opening_balance": fin_cfg.get("cashBalance", 0),
-            "weekly_revenue": (a.get("ventas", 0.0) / 52.0),
+            "weekly_revenue": _weekly(a.get("ventas", 0.0)),
             "collection_rate": fin_cfg.get("collectionRate", 1.0),
-            "payroll": fin_cfg.get("payrollWeekly", a.get("costosFijos", 0.0) / 52.0),
+            "payroll": fin_cfg.get("payrollWeekly", _weekly(a.get("costosFijos", 0.0))),
             "rent": fin_cfg.get("rentWeekly", 0),
-            "operating_expenses": (opex / 52.0),
+            "operating_expenses": _weekly(opex),
         },
         "scenarios": cfg.get("scenarios", {
             "base": {"growth_adjustment": 0.0, "margin_adjustment": 0.0},

@@ -69,3 +69,18 @@ def test_forecast_trims_trailing_zeros():
     inp = to_forecast_input(fin, {})
     assert len(inp["historical_periods"]) == 2          # trailing zeros trimmed
     assert inp["historical_periods"][-1]["revenue"] == 200
+
+
+def test_forecast_weekly_revenue_uses_run_rate():
+    from financials import build_financials
+    from adapters import to_forecast_input
+    parsed = {"months": ["E","F","M","A"],
+        "incomeStatement": {"monthly": {
+            "ventas": [100,200,0,0], "costoReposicion": [0,0,0,0], "comisiones": [0,0,0,0],
+            "utilidadBruta": [100,200,0,0], "costosFijos": [0,0,0,0], "amortizacion": [0,0,0,0],
+            "utilidadOperativa": [0,0,0,0], "gastosVariables": [0,0,0,0], "utilidadNeta": [0,0,0,0]}},
+        "cashFlow": {"monthly": {"ingresos":[0,0,0,0],"egresos":[0,0,0,0],"total": [0,0,0,0]}},
+        "breakEven": {"margenBrutoMonthly": []}, "warnings": [], "year": 2026}
+    fin = build_financials(parsed)   # active=2, ventas YTD=300, annualized=1800
+    wr = to_forecast_input(fin, {})["cash_flow_inputs"]["weekly_revenue"]
+    assert abs(wr - 1800/52.0) < 1e-6   # run-rate/52, NOT YTD-300/52
