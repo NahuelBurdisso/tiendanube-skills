@@ -19,6 +19,9 @@ def write_xlsx(fin, results, out_path):
         ws.append([label] + m.get(key, []) + [a.get(key, 0.0)])
     ws.append([]); ws.append(["Margen bruto", a.get("margenBruto", 0.0)])
     ws.append(["Margen neto", a.get("margenNeto", 0.0)])
+    ws.append([])
+    ws.append(["Meses con datos (YTD)", fin.get("activeMonths")])
+    ws.append(["Ventas anualizadas (run-rate)", fin.get("annualizedVentas", 0.0)])
     # --- Ratios (only surfaced) ---
     rt = wb.create_sheet("Ratios")
     rt.append(["Ratio", "Valor"])

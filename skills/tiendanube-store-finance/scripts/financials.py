@@ -9,6 +9,12 @@ def build_financials(parsed, currency="ARS", store_name=None):
     ventas = annual.get("ventas", 0.0)
     annual["margenBruto"] = (annual.get("utilidadBruta", 0.0) / ventas) if ventas else 0.0
     annual["margenNeto"] = (annual.get("utilidadNeta", 0.0) / ventas) if ventas else 0.0
+    ventas_series = m.get("ventas", [])
+    active = 0
+    for i, v in enumerate(ventas_series):
+        if v:
+            active = i + 1            # count up to the last nonzero Ventas month
+    annualized_ventas = (annual.get("ventas", 0.0) / active * 12) if active else 0.0
     return {
         "schemaVersion": SCHEMA_VERSION,
         "source": "workbook",
@@ -16,6 +22,8 @@ def build_financials(parsed, currency="ARS", store_name=None):
         "currency": currency,
         "months": parsed["months"],
         "year": parsed.get("year"),
+        "activeMonths": active,
+        "annualizedVentas": annualized_ventas,
         "incomeStatement": {"monthly": m, "annual": annual},
         "cashFlow": parsed["cashFlow"],
         "breakEven": parsed["breakEven"],

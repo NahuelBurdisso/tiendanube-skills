@@ -12,7 +12,8 @@ def _avg_growth(series):
 def to_forecast_input(fin, cfg):
     m = fin["incomeStatement"]["monthly"]
     a = fin["incomeStatement"]["annual"]
-    ventas = m["ventas"]
+    active = fin.get("activeMonths") or len(m["ventas"])
+    ventas = m["ventas"][:active]
     opex = (a.get("gastosVariables", 0.0) + a.get("costosFijos", 0.0))
     opex_pct = (opex / a["ventas"]) if a.get("ventas") else 0.0
     fin_cfg = cfg.get("finance", cfg)  # tolerate flat or nested config
@@ -75,12 +76,13 @@ def to_variance_input(fin, company=None):
     """Period-over-period: actual = last month, prior_year = previous month.
     NO budget exists in the template, so `budget` is omitted."""
     m = fin["incomeStatement"]["monthly"]
+    active = fin.get("activeMonths") or len(m.get("ventas", []))
     label = {"ventas": "Ventas", "costoReposicion": "Costo reposición",
              "utilidadBruta": "Utilidad bruta", "utilidadOperativa": "Utilidad operativa",
              "utilidadNeta": "Utilidad neta", "costosFijos": "Costos fijos"}
     items = []
     for key, name in label.items():
-        series = m.get(key, [])
+        series = m.get(key, [])[:active]
         if len(series) >= 2:
             items.append({
                 "name": name,

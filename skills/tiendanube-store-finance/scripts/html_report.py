@@ -29,6 +29,11 @@ def build_html(fin, results, cfg):
     warn_html = ("<h2>Advertencias de datos</h2><ul>" +
                  "".join(f"<li class='note'>{_html.escape(w)}</li>" for w in warns) +
                  "</ul>") if warns else ""
+    active = fin.get("activeMonths")
+    ann = fin.get("annualizedVentas")
+    ytd_note = (f"<p class='note'>Período con datos: {active} meses de "
+                f"{fin.get('year','')} (YTD). Ventas anualizadas (run-rate): "
+                f"{_money(ann, sym)}.</p>") if active else ""
     head_months = "".join(f"<th class='r'>{mo}</th>" for mo in months) + "<th class='r'>Anual</th>"
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
       :root {{ --accent: {accent}; }}
@@ -44,6 +49,7 @@ def build_html(fin, results, cfg):
       <h2>Estado de Resultados</h2>
       <table><tr><th>Concepto</th>{head_months}</tr>{is_rows}</table>
       <p class="note">Margen bruto {a.get('margenBruto',0):.1%} · Margen neto {a.get('margenNeto',0):.1%}</p>
+      {ytd_note}
       <h2>Ratios</h2><table><tr><th>Ratio</th><th class="r">Valor</th></tr>{ratios}</table>
       {warn_html}
     </body></html>"""
