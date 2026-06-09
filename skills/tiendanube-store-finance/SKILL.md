@@ -25,7 +25,15 @@ python3 "$SKILL_DIR"/scripts/analyze_finance.py "<client-workbook>.xlsx" --confi
 "$SKILL_DIR"/scripts/render.sh report.html store-finance.pdf
 ```
 Outputs: `financials.json`, `store-finance.xlsx` (tabs: Estado de Resultados, Ratios,
-Forecast, Variance período), `report.html` → `store-finance.pdf`.
+Forecast, Variance período, Advertencias), `report.html` → `store-finance.pdf`.
+
+The PDF is a branded editorial-financial report (Bodoni Moda + Archivo, SVG charts):
+cover → **00** Resumen ejecutivo (KPIs + computed "lecturas clave") → **01** Estado de
+resultados (tabla mensual + barras + cascada P&L) → **02** Rentabilidad y costos
+(evolución de márgenes + estructura de costos) → **03** Punto de equilibrio (+ margen de
+seguridad) → **04** Proyección y escenarios (base/optimista/conservador + tendencia) →
+**05** Variación mensual → **06** Supuestos. Charts live in `scripts/charts.py`; the
+narrative is computed in `scripts/html_report.py`. Edit brand/period in `report.config.json`.
 
 ## How the parser works
 Label-anchored: it finds `ESTADO DE RESULTADOS` / `FLUJOS DE DINERO` /
