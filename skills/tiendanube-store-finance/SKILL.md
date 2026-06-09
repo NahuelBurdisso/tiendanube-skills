@@ -54,4 +54,11 @@ warning is emitted into `financials.json#warnings` and rendered in the report un
   (a private retailer has no debt/equity/market data). DCF off by default.
 - Variance is period-over-period (the template carries no budget).
 
+## Known limitations
+- Error-cell (`#REF!`) warnings are detected on the **income statement** block only, and
+  rely on openpyxl's cached values (`data_only=True`); a workbook saved without cached
+  error strings may read those cells as blank → 0 with no warning. Eyeball the statement.
+- Forecast scenario deltas use built-in base/bull/bear defaults; the `finance.scenarios`
+  config knob is not yet wired through. `forecastPeriods` and cost inputs are honored.
+
 See `reference/financials.schema.md` for the canonical data contract.
