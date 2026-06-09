@@ -21,6 +21,24 @@ def test_ratios_input_maps_statement(fixture_workbook):
     assert inp["income_statement"]["operating_income"] == 6000  # 500*12
     assert inp["balance_sheet"].get("total_debt", 0) == 0
 
+def test_ratios_cogs_reconciles_to_statement_gross_margin():
+    from adapters import to_ratios_input
+    fin = {
+        "incomeStatement": {"annual": {
+            "ventas": 1000.0, "costoReposicion": 400.0, "comisiones": 100.0,
+            "utilidadBruta": 500.0, "utilidadOperativa": 300.0,
+            "utilidadNeta": 200.0, "amortizacion": 0.0}},
+        "balanceSheetPartial": {"inventory": 0, "accountsReceivable": 0, "accountsPayable": 0},
+        "cashFlow": {"monthly": {"total": [0]}},
+    }
+    inp = to_ratios_input(fin)
+    cogs = inp["income_statement"]["cost_of_goods_sold"]
+    assert cogs == 500.0  # ventas - utilidadBruta, NOT costoReposicion (400)
+    # ratio gross margin = (revenue - cogs)/revenue == statement margenBruto (500/1000)
+    gm = (inp["income_statement"]["revenue"] - cogs) / inp["income_statement"]["revenue"]
+    assert abs(gm - 0.5) < 1e-9
+
+
 def test_variance_input_period_over_period(fixture_workbook):
     inp = to_variance_input(_fin(fixture_workbook))
     names = {li["name"] for li in inp["line_items"]}

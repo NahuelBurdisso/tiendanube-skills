@@ -50,7 +50,9 @@ def to_ratios_input(fin):
     return {
         "income_statement": {
             "revenue": a.get("ventas", 0.0),
-            "cost_of_goods_sold": a.get("costoReposicion", 0.0),
+            # effective COGS = revenue - gross profit (includes Comisiones), so the
+            # ratio's gross margin reconciles to the statement's margenBruto
+            "cost_of_goods_sold": a.get("ventas", 0.0) - a.get("utilidadBruta", 0.0),
             "operating_income": op_income,
             "net_income": a.get("utilidadNeta", 0.0),
             "ebitda": op_income + a.get("amortizacion", 0.0),
