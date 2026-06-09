@@ -29,12 +29,17 @@ def read_statement_block(path, sheet, anchor, line_labels):
     hrow, start_col, months = find_month_header(ws, after_row=anchor_row)
     n = len(months)
     lines = {}
+    errors = []
     for label in line_labels:
         key = normalize(label)
         if key in idx and idx[key] > anchor_row:
             r = idx[key]
-            lines[key] = [_num(ws.cell(r, start_col + i).value) for i in range(n)]
-    return {"months": months, "lines": lines, "anchorRow": anchor_row, "startCol": start_col}
+            raw = [ws.cell(r, start_col + i).value for i in range(n)]
+            if any(isinstance(x, str) and x.startswith("#") for x in raw):
+                errors.append(key)
+            lines[key] = [_num(x) for x in raw]
+    return {"months": months, "lines": lines, "errors": errors,
+            "anchorRow": anchor_row, "startCol": start_col}
 
 # canonical line label sets
 _IS = ["Ventas","Costo reposición","Comisiones","Utilidad bruta","Costos fijos",
@@ -58,6 +63,13 @@ def parse_workbook(path, sheet="Resultados"):
         be_margin = []
     n = len(isb["months"])
     is_monthly = {cam: isb["lines"].get(norm, [0]*n) for norm, cam in _IS_KEYS.items()}
+    warnings = []
+    for block, where in ((isb, "Estado de Resultados"),
+                         (cfb, "Flujos de Dinero")):
+        for key in block.get("errors", []):
+            warnings.append(
+                f"'{key}' tiene celdas con error (#REF!/#DIV0) en {where} del workbook "
+                f"— se muestra 0; revisar la fórmula del cliente.")
     return {
         "months": isb["months"],
         "incomeStatement": {"monthly": is_monthly},
@@ -66,4 +78,5 @@ def parse_workbook(path, sheet="Resultados"):
             "egresos":  cfb["lines"].get("egresos", [0]*n),
             "total":    cfb["lines"].get("total", [0]*n)}},
         "breakEven": {"margenBrutoMonthly": be_margin},
+        "warnings": warnings,
     }
