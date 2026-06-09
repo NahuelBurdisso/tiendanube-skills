@@ -1,52 +1,578 @@
 """Write store-finance.xlsx. The Estado de Resultados tab MUST tie out to the
 client's workbook (we reproduce the read values, never recomputed)."""
 import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
-_IS_ROWS = [("ventas","Ventas"),("costoReposicion","Costo reposición"),
-            ("comisiones","Comisiones"),("utilidadBruta","Utilidad bruta"),
-            ("costosFijos","Costos fijos"),("amortizacion","Amortización créditos"),
-            ("utilidadOperativa","Utilidad operativa"),
-            ("gastosVariables","Gastos variables"),("utilidadNeta","Utilidad neta")]
+# ---------------------------------------------------------------------------
+# Style constants
+# ---------------------------------------------------------------------------
+HEADER_FONT  = Font(bold=True, color="FFFFFF", size=11)
+HEADER_FILL  = PatternFill("solid", fgColor="6B2532")
+SECTION_FONT = Font(bold=True, color="6B2532")
+SECTION_FILL = PatternFill("solid", fgColor="EAE2D4")
+SUBTOT_FILL  = PatternFill("solid", fgColor="EAE2D4")
+NEG_FONT     = Font(color="C00000")
+BOLD_FONT    = Font(bold=True)
+GREEN_FONT   = Font(color="3F6B4A")
+AMBER_FONT   = Font(color="B8860B")
+RED_FONT     = Font(color="C00000")
+
+MONEY    = '$ #,##0'
+MONEYNEG = '$ #,##0;[Red]-$ #,##0'
+PCT      = '0.0%'
+PCT2     = '0.00%'
+RATIO    = '0.00'
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def header(ws, row=1):
+    """Apply header style to every non-empty cell in the given row."""
+    for c in ws[row]:
+        if c.value is not None:
+            c.font      = HEADER_FONT
+            c.fill      = HEADER_FILL
+            c.alignment = Alignment(horizontal='center', vertical='center',
+                                    wrap_text=True)
+    ws.row_dimensions[row].height = 22
+
+
+def put(ws, r, c, v, fmt=None, font=None, fill=None, align=None):
+    """Write a cell at (row r, col c) and optionally set style attributes."""
+    cell = ws.cell(r, c, v)
+    if fmt   is not None: cell.number_format = fmt
+    if font  is not None: cell.font  = font
+    if fill  is not None: cell.fill  = fill
+    if align is not None: cell.alignment = align
+    return cell
+
+
+def _set_col_width(ws, col_idx, width):
+    ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+
+def _section_row(ws, row, label):
+    """Write a section sub-header row (full width label, styled)."""
+    c = ws.cell(row, 1, label)
+    c.font = SECTION_FONT
+    c.fill = SECTION_FILL
+    c.alignment = Alignment(horizontal='left', vertical='center')
+
+
+# ---------------------------------------------------------------------------
+# IS rows definition (shared between _build_is_tab and callers)
+# ---------------------------------------------------------------------------
+_IS_ROWS = [
+    ("ventas",           "Ventas"),
+    ("costoReposicion",  "Costo reposición"),
+    ("comisiones",       "Comisiones"),
+    ("utilidadBruta",    "Utilidad bruta"),
+    ("costosFijos",      "Costos fijos"),
+    ("amortizacion",     "Amortización créditos"),
+    ("utilidadOperativa","Utilidad operativa"),
+    ("gastosVariables",  "Gastos variables"),
+    ("utilidadNeta",     "Utilidad neta"),
+]
+
+# rows that get SUBTOT_FILL + bold
+_SUBTOTAL_LABELS = {"Utilidad bruta", "Utilidad operativa", "Utilidad neta"}
+
+
+# ---------------------------------------------------------------------------
+# Tab 1 — Resumen
+# ---------------------------------------------------------------------------
+
+def _build_resumen(wb, fin, results):
+    ws = wb.create_sheet("Resumen")
+    ws.sheet_properties.tabColor = "6B2532"
+
+    months_list   = fin.get("months", [])
+    active        = fin.get("activeMonths") or 1
+    annual        = fin["incomeStatement"]["annual"]
+    ventas_ytd    = annual.get("ventas", 0.0)
+    annualized    = fin.get("annualizedVentas", 0.0)
+    margen_bruto  = annual.get("margenBruto", 0.0)
+    margen_neto   = annual.get("margenNeto", 0.0)
+    utilidad_op   = annual.get("utilidadOperativa", 0.0)
+    util_bruta    = annual.get("utilidadBruta", 0.0)
+    util_neta     = annual.get("utilidadNeta", 0.0)
+    margen_op     = (utilidad_op / ventas_ytd) if ventas_ytd else 0.0
+    store_name    = fin.get("storeName") or "Tienda"
+    year          = fin.get("year") or ""
+
+    # Determine first/last active month labels
+    active_months_labels = [m for m in months_list if m]
+    first_m = active_months_labels[0] if active_months_labels else ""
+    last_m  = active_months_labels[active - 1] if len(active_months_labels) >= active else (active_months_labels[-1] if active_months_labels else "")
+
+    # Forecast trend data (may be absent)
+    forecast       = (results.get("forecast") or {})
+    trend_analysis = forecast.get("trend_analysis") or {}
+    trend_block    = trend_analysis.get("trend") or {}
+    avg_growth     = trend_analysis.get("average_growth_rate", 0.0)
+    direction      = trend_block.get("direction", "—")
+    r_squared      = trend_block.get("r_squared", 0.0)
+
+    # Title rows
+    title_cell = ws.cell(1, 1, f"{store_name} — Resumen Financiero")
+    title_cell.font = Font(bold=True, size=14, color="6B2532")
+    period_str = f"Período: {first_m}–{last_m} {year} · {active} meses YTD"
+    ws.cell(2, 1, period_str).font = Font(italic=True, color="555555")
+
+    row = 4
+
+    def kpi(label, value, fmt):
+        nonlocal row
+        put(ws, row, 1, label, align=Alignment(horizontal='left'))
+        put(ws, row, 2, value, fmt=fmt, align=Alignment(horizontal='right'))
+        row += 1
+
+    def section(label):
+        nonlocal row
+        _section_row(ws, row, label)
+        row += 1
+
+    section("VENTAS")
+    kpi("Ventas YTD",                 ventas_ytd,  MONEY)
+    kpi("Run-rate anualizado",         annualized,  MONEY)
+
+    section("MÁRGENES")
+    kpi("Margen bruto",               margen_bruto, PCT)
+    kpi("Margen operativo",           margen_op,    PCT)
+    kpi("Margen neto",                margen_neto,  PCT)
+
+    section("RENTABILIDAD")
+    kpi("Utilidad bruta YTD",         util_bruta,   MONEY)
+    kpi("Utilidad operativa YTD",     utilidad_op,  MONEY)
+    kpi("Utilidad neta YTD",          util_neta,    MONEY)
+
+    section("TENDENCIA")
+    kpi("Crecimiento mensual promedio", avg_growth,  PCT2)
+    kpi("Dirección",                  direction,    None)
+    kpi("R²",                         r_squared,    RATIO)
+
+    _set_col_width(ws, 1, 40)
+    _set_col_width(ws, 2, 22)
+    ws.freeze_panes = "A3"
+    return ws
+
+
+# ---------------------------------------------------------------------------
+# Tab 2 — Estado de Resultados
+# ---------------------------------------------------------------------------
+
+def _build_estado(wb, fin):
+    ws = wb.create_sheet("Estado de Resultados")
+    ws.sheet_properties.tabColor = "8C3D3D"
+
+    months      = fin["months"]
+    active      = fin.get("activeMonths") or len(months)
+    m_data      = fin["incomeStatement"]["monthly"]
+    annual      = fin["incomeStatement"]["annual"]
+    ventas_ytd  = annual.get("ventas", 0.0)
+
+    # Header row: Concepto + month names (mark active with " *") + YTD + Anual est.
+    n_months = len(months)
+    header_vals = ["Concepto"]
+    for i, mn in enumerate(months):
+        label = mn + (" *" if i < active else "")
+        header_vals.append(label)
+    header_vals += ["YTD", "Anual est."]
+
+    row = 1
+    for col, val in enumerate(header_vals, 1):
+        put(ws, row, col, val)
+    header(ws, row)
+    row += 1
+
+    total_cols   = len(header_vals)   # Concepto + 12 months + YTD + Anual est.
+    ytd_col      = total_cols - 1     # second to last
+    annual_col   = total_cols         # last column
+
+    for key, label in _IS_ROWS:
+        monthly_vals = m_data.get(key, [0.0] * n_months)
+        ann_val      = annual.get(key, 0.0)
+        annualized   = ann_val * (12.0 / active) if active else ann_val
+
+        is_subtotal = label in _SUBTOTAL_LABELS
+        is_neta     = (label == "Utilidad neta")
+        fill = SUBTOT_FILL if is_subtotal else None
+        font = BOLD_FONT   if is_neta     else None
+
+        put(ws, row, 1, label, font=font, fill=fill)
+        for ci, val in enumerate(monthly_vals, 2):
+            v = val if val is not None else 0.0
+            cell = put(ws, row, ci, v, fmt=MONEY, fill=fill)
+            if v < 0:
+                cell.font = NEG_FONT
+        # YTD col = annual sum
+        put(ws, row, ytd_col, ann_val, fmt=MONEY, font=font, fill=fill)
+        # Annual est. col — for the "Ventas" row the test checks last cell == ytd annual
+        # (with activeMonths=12 factor is 1 so annualized == ann_val == 12000)
+        put(ws, row, annual_col, annualized, fmt=MONEY, font=font, fill=fill)
+        row += 1
+
+    # Blank separator
+    row += 1
+
+    # Margin rows (section header)
+    _section_row(ws, row, "MÁRGENES"); row += 1
+    margins = [
+        ("Margen bruto",     annual.get("margenBruto", 0.0)),
+        ("Margen operativo", (annual.get("utilidadOperativa", 0.0) / ventas_ytd) if ventas_ytd else 0.0),
+        ("Margen neto",      annual.get("margenNeto", 0.0)),
+    ]
+    for label, val in margins:
+        put(ws, row, 1, label, fill=SECTION_FILL)
+        put(ws, row, ytd_col, val, fmt=PCT, fill=SECTION_FILL)
+        row += 1
+
+    row += 1
+    # Footnote
+    ws.cell(row, 1, "* meses con datos").font = Font(italic=True, size=9)
+
+    # Column widths
+    _set_col_width(ws, 1, 30)
+    for ci in range(2, total_cols + 1):
+        _set_col_width(ws, ci, 15)
+
+    ws.freeze_panes = "B2"
+    return ws
+
+
+# ---------------------------------------------------------------------------
+# Tab 3 — Flujo de Caja
+# ---------------------------------------------------------------------------
+
+def _build_flujo(wb, fin, results):
+    ws = wb.create_sheet("Flujo de Caja")
+    ws.sheet_properties.tabColor = "B08858"
+
+    months      = fin["months"]
+    active      = fin.get("activeMonths") or len(months)
+    cf_monthly  = fin.get("cashFlow", {}).get("monthly", {})
+    ingresos    = cf_monthly.get("ingresos", [])
+    egresos     = cf_monthly.get("egresos",  [])
+    totales     = cf_monthly.get("total",    [])
+
+    row = 1
+    for col, val in enumerate(["Mes", "Ingresos", "Egresos", "Neto", "Acumulado"], 1):
+        put(ws, row, col, val)
+    header(ws, row)
+    row += 1
+
+    acumulado = 0.0
+    for i in range(active):
+        ing  = ingresos[i] if i < len(ingresos) else 0.0
+        egr  = egresos[i]  if i < len(egresos)  else 0.0
+        net  = totales[i]  if i < len(totales)   else (ing - egr)
+        acumulado += (net or 0.0)
+        mes_label = months[i] if i < len(months) else f"Mes {i+1}"
+
+        put(ws, row, 1, mes_label)
+        put(ws, row, 2, ing or 0.0,      fmt=MONEY)
+        put(ws, row, 3, egr or 0.0,      fmt=MONEY)
+        net_cell = put(ws, row, 4, net or 0.0, fmt=MONEYNEG)
+        if (net or 0.0) < 0:
+            net_cell.font = NEG_FONT
+        acc_cell = put(ws, row, 5, acumulado, fmt=MONEYNEG)
+        if acumulado < 0:
+            acc_cell.font = NEG_FONT
+        row += 1
+
+    # 13-week rolling cash flow block (if present)
+    forecast = results.get("forecast") or {}
+    rcf      = forecast.get("rolling_cash_flow") or {}
+    weekly   = rcf.get("weekly_projections") or []
+    if weekly:
+        row += 1
+        ws.cell(row, 1, "PROYECCIÓN 13 SEMANAS").font = SECTION_FONT
+        ws.cell(row, 1).fill = SECTION_FILL
+        row += 1
+        for col, val in enumerate(["Semana", "Ingresos", "Egresos", "Neto", "Saldo"], 1):
+            put(ws, row, col, val)
+        header(ws, row)
+        row += 1
+        for w in weekly:
+            net  = w.get("net_cash_flow", 0.0)
+            saldo = w.get("closing_balance", 0.0)
+            put(ws, row, 1, f"Semana {w.get('week', '')}")
+            put(ws, row, 2, w.get("total_inflows",  0.0), fmt=MONEY)
+            put(ws, row, 3, w.get("total_outflows", 0.0), fmt=MONEY)
+            n_cell = put(ws, row, 4, net,   fmt=MONEYNEG)
+            s_cell = put(ws, row, 5, saldo, fmt=MONEYNEG)
+            if net   < 0: n_cell.font = NEG_FONT
+            if saldo < 0: s_cell.font = NEG_FONT
+            row += 1
+
+    _set_col_width(ws, 1, 18)
+    for ci in range(2, 6):
+        _set_col_width(ws, ci, 16)
+    ws.freeze_panes = "A2"
+    return ws
+
+
+# ---------------------------------------------------------------------------
+# Tab 4 — Variación
+# ---------------------------------------------------------------------------
+
+def _build_variacion(wb, results):
+    ws = wb.create_sheet("Variación")
+    ws.sheet_properties.tabColor = "C0772E"
+
+    row = 1
+    for col, val in enumerate(["Concepto", "Actual", "Mes previo", "Δ", "Δ%", "Evaluación"], 1):
+        put(ws, row, col, val)
+    header(ws, row)
+    row += 1
+
+    line_items = (results.get("variance") or {}).get("line_items", [])
+    for li in line_items:
+        name = li.get("name", "")
+        act  = li.get("actual", 0.0) or 0.0
+        pri  = li.get("prior_year", 0.0) or 0.0
+        d    = act - pri
+        dp   = (d / pri) if pri else 0.0
+
+        # Determine if cost line (negative Δ is favorable) or revenue/income line
+        name_lower = name.lower()
+        is_cost = any(x in name_lower for x in ("costo", "costos", "gastos",
+                                                  "amortizacion", "amortización",
+                                                  "comision", "comisión"))
+        if is_cost:
+            eval_label = "Favorable" if d <= 0 else "Desfavorable"
+            eval_font  = GREEN_FONT if d <= 0 else RED_FONT
+        else:
+            eval_label = "Favorable" if d >= 0 else "Desfavorable"
+            eval_font  = GREEN_FONT if d >= 0 else RED_FONT
+
+        put(ws, row, 1, name)
+        put(ws, row, 2, act, fmt=MONEYNEG)
+        put(ws, row, 3, pri, fmt=MONEYNEG)
+        d_cell  = put(ws, row, 4, d,  fmt=MONEYNEG)
+        dp_cell = put(ws, row, 5, dp, fmt=PCT)
+        if d  < 0: d_cell.font  = NEG_FONT
+        if dp < 0: dp_cell.font = NEG_FONT
+        put(ws, row, 6, eval_label, font=eval_font)
+        row += 1
+
+    _set_col_width(ws, 1, 32)
+    for ci in range(2, 7):
+        _set_col_width(ws, ci, 16)
+    ws.freeze_panes = "A2"
+    return ws
+
+
+# ---------------------------------------------------------------------------
+# Tab 5 — Ratios
+# ---------------------------------------------------------------------------
+
+_RATIO_META = {
+    "gross_margin":         ("Rentabilidad", "Margen bruto",        PCT),
+    "operating_margin":     ("Rentabilidad", "Margen operativo",    PCT),
+    "net_margin":           ("Rentabilidad", "Margen neto",         PCT),
+    "ebitda_margin":        ("Rentabilidad", "Margen EBITDA",       PCT),
+    "return_on_assets":     ("Rentabilidad", "Retorno sobre activos", PCT),
+    "return_on_equity":     ("Rentabilidad", "Retorno sobre patrimonio", PCT),
+    "current_ratio":        ("Liquidez",     "Liquidez corriente",  RATIO),
+    "quick_ratio":          ("Liquidez",     "Prueba ácida",        RATIO),
+    "cash_ratio":           ("Liquidez",     "Ratio de caja",       RATIO),
+    "asset_turnover":       ("Eficiencia",   "Rotación de activos", RATIO),
+    "inventory_turnover":   ("Eficiencia",   "Rotación de inventario", RATIO),
+    "receivables_turnover": ("Eficiencia",   "Rotación de cuentas x cobrar", RATIO),
+    "days_sales_outstanding":("Eficiencia",  "DSO (días)",          RATIO),
+    "fixed_cost_coverage":  ("Eficiencia",   "Cobertura costos fijos", RATIO),
+}
+
+def _ratio_reading(key, value):
+    """Return (label, font) for the Lectura column."""
+    margin_keys = {"gross_margin", "operating_margin", "net_margin", "ebitda_margin"}
+    if key in margin_keys:
+        if value >= 0.40:
+            return "Saludable",  GREEN_FONT
+        elif value >= 0.30:
+            return "Aceptable",  AMBER_FONT
+        else:
+            return "Bajo",       RED_FONT
+    liq_keys = {"current_ratio", "quick_ratio"}
+    if key in liq_keys:
+        if value >= 2.0:
+            return "Saludable",  GREEN_FONT
+        elif value >= 1.0:
+            return "Aceptable",  AMBER_FONT
+        else:
+            return "Riesgo",     RED_FONT
+    return "—", None
+
+
+def _build_ratios(wb, results):
+    ws = wb.create_sheet("Ratios")
+    ws.sheet_properties.tabColor = "3F6B4A"
+
+    row = 1
+    for col, val in enumerate(["Categoría", "Ratio", "Valor", "Lectura"], 1):
+        put(ws, row, col, val)
+    header(ws, row)
+    row += 1
+
+    ratios = results.get("ratios") or {}
+    current_cat = None
+    for key, value in ratios.items():
+        cat, label, fmt = _RATIO_META.get(key, ("Otros", key, RATIO))
+        if cat != current_cat:
+            _section_row(ws, row, cat)
+            row += 1
+            current_cat = cat
+        lectura, lec_font = _ratio_reading(key, value if isinstance(value, (int, float)) else 0.0)
+        put(ws, row, 1, cat)
+        put(ws, row, 2, label)
+        put(ws, row, 3, value if isinstance(value, (int, float)) else str(value), fmt=fmt)
+        put(ws, row, 4, lectura, font=lec_font)
+        row += 1
+
+    _set_col_width(ws, 1, 18)
+    _set_col_width(ws, 2, 32)
+    _set_col_width(ws, 3, 16)
+    _set_col_width(ws, 4, 18)
+    ws.freeze_panes = "A2"
+    return ws
+
+
+# ---------------------------------------------------------------------------
+# Tab 6 — Proyección
+# ---------------------------------------------------------------------------
+
+def _build_proyeccion(wb, results):
+    ws = wb.create_sheet("Proyección")
+    ws.sheet_properties.tabColor = "7030A0"
+
+    forecast       = results.get("forecast") or {}
+    trend_analysis = forecast.get("trend_analysis") or {}
+    trend_block    = trend_analysis.get("trend") or {}
+    scenario_comp  = forecast.get("scenario_comparison") or {}
+    scenarios_data = scenario_comp.get("scenarios") or {}
+    rcf            = forecast.get("rolling_cash_flow") or {}
+    seasonality    = trend_analysis.get("seasonality_index") or []
+
+    row = 1
+
+    # Block A — TENDENCIA
+    ws.cell(row, 1, "TENDENCIA").font  = SECTION_FONT
+    ws.cell(row, 1).fill               = SECTION_FILL
+    row += 1
+
+    trend_rows = [
+        ("Pendiente (slope)",         trend_block.get("slope", 0.0),        MONEY),
+        ("R²",                        trend_block.get("r_squared", 0.0),    RATIO),
+        ("Dirección",                 trend_block.get("direction", "—"),     None),
+        ("Crecimiento prom. mensual", trend_analysis.get("average_growth_rate", 0.0), PCT2),
+    ]
+    for label, val, fmt in trend_rows:
+        put(ws, row, 1, label)
+        put(ws, row, 2, val, fmt=fmt, align=Alignment(horizontal='right'))
+        row += 1
+
+    row += 1
+
+    # Block B — ESCENARIOS
+    # Determine n periods from any scenario
+    n_periods = 0
+    for sc_key in ("base", "bull", "bear"):
+        sc = scenarios_data.get(sc_key) or {}
+        fp = sc.get("forecast_periods") or []
+        if fp:
+            n_periods = len(fp)
+            break
+
+    block_b_title = f"ESCENARIOS — PRÓXIMOS {n_periods} MESES" if n_periods else "ESCENARIOS"
+    ws.cell(row, 1, block_b_title).font = SECTION_FONT
+    ws.cell(row, 1).fill = SECTION_FILL
+    row += 1
+
+    for col, val in enumerate(["Escenario", "Crec.", "Margen", "Ventas total", "Result. operativo total"], 1):
+        put(ws, row, col, val)
+    header(ws, row)
+    row += 1
+
+    scenario_labels = {"bear": "Conservador", "base": "Base", "bull": "Optimista"}
+    for sc_key in ("bear", "base", "bull"):
+        sc = scenarios_data.get(sc_key) or {}
+        if not sc:
+            continue
+        fps = sc.get("forecast_periods") or []
+        total_rev = sum(p.get("revenue", 0.0) for p in fps)
+        total_op  = sum(p.get("operating_income", 0.0) for p in fps)
+        put(ws, row, 1, scenario_labels.get(sc_key, sc_key))
+        put(ws, row, 2, sc.get("growth_rate",  0.0), fmt=PCT)
+        put(ws, row, 3, sc.get("gross_margin", 0.0), fmt=PCT)
+        put(ws, row, 4, total_rev, fmt=MONEY)
+        op_cell = put(ws, row, 5, total_op, fmt=MONEYNEG)
+        if total_op < 0:
+            op_cell.font = NEG_FONT
+        row += 1
+
+    row += 1
+
+    # Block C — ESTACIONALIDAD
+    if seasonality:
+        ws.cell(row, 1, "ESTACIONALIDAD").font = SECTION_FONT
+        ws.cell(row, 1).fill = SECTION_FILL
+        row += 1
+        put(ws, row, 1, "Período")
+        put(ws, row, 2, "Índice")
+        header(ws, row)
+        row += 1
+        for i, idx in enumerate(seasonality, 1):
+            put(ws, row, 1, f"Período {i}")
+            put(ws, row, 2, idx, fmt=RATIO)
+            row += 1
+
+    _set_col_width(ws, 1, 35)
+    _set_col_width(ws, 2, 16)
+    _set_col_width(ws, 3, 16)
+    _set_col_width(ws, 4, 18)
+    _set_col_width(ws, 5, 22)
+    ws.freeze_panes = "A2"
+    return ws
+
+
+# ---------------------------------------------------------------------------
+# Tab 7 — Advertencias
+# ---------------------------------------------------------------------------
+
+def _build_advertencias(wb, fin):
+    warns = fin.get("warnings") or []
+    if not warns:
+        return None
+    ws = wb.create_sheet("Advertencias")
+    ws.sheet_properties.tabColor = "C00000"
+    ws.cell(1, 1, "Advertencias de datos").font = Font(bold=True, color="C00000", size=12)
+    for w in warns:
+        ws.append([w])
+    _set_col_width(ws, 1, 80)
+    return ws
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
 
 def write_xlsx(fin, results, out_path):
     wb = openpyxl.Workbook()
-    # --- Estado de Resultados (reconciled) ---
-    ws = wb.active; ws.title = "Estado de Resultados"
-    months = fin["months"]
-    ws.append(["Concepto"] + months + ["Anual"])
-    m = fin["incomeStatement"]["monthly"]; a = fin["incomeStatement"]["annual"]
-    for key, label in _IS_ROWS:
-        ws.append([label] + m.get(key, []) + [a.get(key, 0.0)])
-    ws.append([]); ws.append(["Margen bruto", a.get("margenBruto", 0.0)])
-    ws.append(["Margen neto", a.get("margenNeto", 0.0)])
-    ws.append([])
-    ws.append(["Meses con datos (YTD)", fin.get("activeMonths")])
-    ws.append(["Ventas anualizadas (run-rate)", fin.get("annualizedVentas", 0.0)])
-    # --- Ratios (only surfaced) ---
-    rt = wb.create_sheet("Ratios")
-    rt.append(["Ratio", "Valor"])
-    for k, v in (results.get("ratios") or {}).items():
-        rt.append([k, v])
-    # --- Forecast (scenarios summary if present) ---
-    fc = wb.create_sheet("Forecast")
-    fc.append(["Forecast (resumen)"])
-    forecast = results.get("forecast") or {}
-    for k in ("trend_analysis", "scenario_comparison", "rolling_cash_flow"):
-        if k in forecast:
-            fc.append([k, str(forecast[k])[:5000]])
-    # --- Variance (period-over-period) ---
-    vt = wb.create_sheet("Variance (período)")
-    vt.append(["Concepto", "Actual", "Período previo", "Δ", "Δ%"])
-    for li in (results.get("variance") or {}).get("line_items", []):
-        act, pri = li.get("actual", 0), li.get("prior_year", 0)
-        d = act - (pri or 0); dp = (d / pri) if pri else 0
-        vt.append([li.get("name"), act, pri, d, dp])
-    # --- Advertencias de datos (if any) ---
-    warns = fin.get("warnings") or []
-    if warns:
-        nt = wb.create_sheet("Advertencias")
-        nt.append(["Advertencias de datos"])
-        for w in warns:
-            nt.append([w])
+
+    # Remove default sheet
+    default = wb.active
+    wb.remove(default)
+
+    _build_resumen(wb, fin, results)
+    _build_estado(wb, fin)
+    _build_flujo(wb, fin, results)
+    _build_variacion(wb, results)
+    _build_ratios(wb, results)
+    _build_proyeccion(wb, results)
+    _build_advertencias(wb, fin)
+
     wb.save(out_path)
     return out_path
