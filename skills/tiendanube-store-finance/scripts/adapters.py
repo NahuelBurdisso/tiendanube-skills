@@ -14,7 +14,8 @@ def to_forecast_input(fin, cfg):
     a = fin["incomeStatement"]["annual"]
     active = fin.get("activeMonths") or len(m["ventas"])
     ventas = m["ventas"][:active]
-    opex = (a.get("gastosVariables", 0.0) + a.get("costosFijos", 0.0))
+    # everything below gross profit: fixed + amortization + variable expenses
+    opex = (a.get("gastosVariables", 0.0) + a.get("costosFijos", 0.0) + a.get("amortizacion", 0.0))
     opex_pct = (opex / a["ventas"]) if a.get("ventas") else 0.0
     fin_cfg = cfg.get("finance", cfg)  # tolerate flat or nested config
     # weekly cash-flow inputs must reflect the RUN-RATE, not the YTD total: annualize
@@ -50,7 +51,9 @@ def to_ratios_input(fin):
     inv = bsp.get("inventory") or 0
     ar = bsp.get("accountsReceivable") or 0
     ap = bsp.get("accountsPayable") or 0
-    cash = (fin["cashFlow"]["monthly"]["total"] or [0])[-1] or 0
+    totals = fin["cashFlow"]["monthly"].get("total", []) or [0]
+    active = fin.get("activeMonths") or len(totals)
+    cash = sum(totals[:active])            # net operating cash generated in the period
     op_income = a.get("utilidadOperativa", 0.0)
     return {
         "income_statement": {
@@ -65,11 +68,11 @@ def to_ratios_input(fin):
         "balance_sheet": {
             "inventory": inv,
             "accounts_receivable": ar,
-            "cash_and_equivalents": cash,
-            "current_assets": inv + ar + cash,
+            "cash_and_equivalents": max(0.0, cash),
+            "current_assets": inv + ar + max(0.0, cash),
             "current_liabilities": ap,
         },
-        "cash_flow": {"operating_cash_flow": op_income},
+        "cash_flow": {"operating_cash_flow": cash},  # real cash, not the accrual proxy
         "market_data": {},
     }
 

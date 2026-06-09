@@ -107,6 +107,39 @@ def stacked_bar(segments, w=540, h=52):
     return "".join(out) + "</svg>"
 
 
+def cashflow(net, cumulative, labels, accent, warm, neg_col, money, w=540, h=172, pad=28):
+    """Monthly net cash as bars around a zero axis + the cumulative cash curve as a
+    line. Reveals cash troughs even in profitable periods."""
+    vals = list(net) + list(cumulative) + [0.0]
+    lo, hi = min(vals), max(vals)
+    rng = (hi - lo) or 1
+    sy = lambda v: pad + ((hi - v) / rng) * (h - 2 * pad)
+    n = len(labels)
+    gap = (w - pad) / n
+    bw = gap * 0.46
+    zy = sy(0)
+    out = [f'<svg viewBox="0 0 {w} {h + 14}" class="chart">',
+           f'<line x1="{pad}" y1="{zy:.1f}" x2="{w}" y2="{zy:.1f}" stroke="#C9BBA2"/>']
+    for i, (v, lb) in enumerate(zip(net, labels)):
+        x = pad + i * gap + (gap - bw) / 2
+        top = min(sy(v), zy)
+        ht = max(1.0, abs(sy(v) - zy))
+        out.append(f'<rect x="{x:.1f}" y="{top:.1f}" width="{bw:.1f}" height="{ht:.1f}" '
+                   f'fill="{accent if v >= 0 else neg_col}" rx="1"/>')
+        out.append(_t(x + bw / 2, h + 7, lb, 6))
+    sx = lambda i: pad + i * gap + gap / 2
+    pts = " ".join(f"{sx(i):.1f},{sy(v):.1f}" for i, v in enumerate(cumulative))
+    out.append(f'<polyline points="{pts}" fill="none" stroke="{warm}" stroke-width="1.9"/>')
+    for i, v in enumerate(cumulative):
+        out.append(f'<circle cx="{sx(i):.1f}" cy="{sy(v):.1f}" r="1.9" fill="{warm}"/>')
+        out.append(_t(sx(i), sy(v) - 4, money(v), 5.6, warm, font="Bodoni Moda", weight="600"))
+    out.append(f'<rect x="{pad:.0f}" y="2" width="7" height="7" fill="{accent}" rx="1"/>'
+               + _t(pad + 10, 8, "Caja neta mensual", 6.6, "#2A211A", anchor="start"))
+    out.append(f'<rect x="{pad+126:.0f}" y="2" width="7" height="7" fill="{warm}" rx="1"/>'
+               + _t(pad + 136, 8, "Caja acumulada", 6.6, "#2A211A", anchor="start"))
+    return "".join(out) + "</svg>"
+
+
 def grouped_bars(groups, series_names, colors, accent, money, w=540, h=160, pad=26):
     """Grouped vertical bars. groups = [(group_label, [v1, v2, ...])] one value per
     series. Used for base/bull/bear scenario comparison."""
