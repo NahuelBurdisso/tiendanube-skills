@@ -17,3 +17,17 @@ def test_build_html_renders_data_warnings(fixture_workbook):
     html = build_html(fin, {"ratios": {}, "forecast": {}, "variance": {}},
                       {"brand": {"name": "ACME"}})
     assert "Advertencias" in html and "#REF!" in html
+
+
+def test_report_has_expert_sections_and_charts(fixture_workbook):
+    from workbook import parse_workbook
+    from financials import build_financials
+    from html_report import build_html
+    fin = build_financials(parse_workbook(fixture_workbook))
+    html = build_html(fin, {"ratios": {}, "forecast": {}, "variance": {}},
+                      {"brand": {"name": "ACME", "accent": "#6B2532"}})
+    for section in ["Resumen ejecutivo", "Estado de resultados", "Punto de equilibrio",
+                    "Proyección y escenarios", "Variación mensual", "Cascada de resultados"]:
+        assert section in html, f"missing section: {section}"
+    assert html.count("<svg") >= 3      # revenue bars + waterfall + margin lines at minimum
+    assert "Run-rate anualizado" in html
