@@ -22,7 +22,7 @@ Integrated Claude Code **skill family** for Tienda Nube / Nuvemshop stores. Laye
 | `skills/tiendanube-stores/` | Platform model, OAuth token exchange, theme dev, MCP install. Foundation. |
 | `skills/tiendanube-store-audit/` | Operative/financial audit → branded PDF with money-quantified levers. |
 | `skills/tiendanube-store-data/` | *(planned)* Canonical extraction layer: TN API → versioned `store-data.json` + `.xlsx`. |
-| `skills/tiendanube-store-finance/` | *(planned)* Retail financial-analyst report from a physical-store **accounting workbook** (consistent `.xlsx` template) + optional Tienda Nube online data. Modes: xlsx-only / tn-only / merged. Vendors borghei/financial-analyst (forecast + variance + ratios + DCF) via openpyxl. → `.xlsx` + branded PDF. |
+| `skills/tiendanube-store-finance/` | Retail financial-analyst report from a physical-store **accounting workbook** (the "Más Orden Más Ganancia" `.xlsx` template). **xlsx-only mode shipped**: label-anchored, multi-year-aware parser reads the computed statements → forecast + ratios + period-over-period variance (vendored borghei/financial-analyst, openpyxl) → `.xlsx` + branded PDF, reconciled to the workbook. `tn-only`/`merged` (Tienda Nube online data) pending Phase A. |
 | `docs/specs/` | Design specs (brainstorming output). |
 
 ## Conventions (keep the family integrated)
