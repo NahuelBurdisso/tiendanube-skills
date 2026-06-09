@@ -35,3 +35,14 @@ def find_month_header(ws, after_row, search=6):
                     c += 1
                 return r, col, months
     raise ValueError(f"no month header found after row {after_row}")
+
+def read_year_row(ws, header_row, start_col, n):
+    """Year labels sitting in the row directly above the month header (e.g. 2025, 2026).
+    Returns a list aligned to the n month columns; entries are int years or None."""
+    if header_row <= 1:
+        return [None] * n
+    out = []
+    for i in range(n):
+        v = ws.cell(header_row - 1, start_col + i).value
+        out.append(int(v) if isinstance(v, (int, float)) else None)
+    return out

@@ -15,6 +15,7 @@ def build_financials(parsed, currency="ARS", store_name=None):
         "storeName": store_name,
         "currency": currency,
         "months": parsed["months"],
+        "year": parsed.get("year"),
         "incomeStatement": {"monthly": m, "annual": annual},
         "cashFlow": parsed["cashFlow"],
         "breakEven": parsed["breakEven"],
