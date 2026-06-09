@@ -15,3 +15,17 @@ def test_write_xlsx_has_statements_tab(fixture_workbook, tmp_path):
     rows = list(ws.iter_rows(values_only=True))
     ventas = next(r for r in rows if r and r[0] == "Ventas")
     assert ventas[-1] == 12000   # annual total column
+
+def test_write_xlsx_includes_warnings_sheet(fixture_workbook, tmp_path):
+    import openpyxl
+    from workbook import parse_workbook
+    from financials import build_financials
+    from xlsx_report import write_xlsx
+    fin = build_financials(parse_workbook(fixture_workbook))
+    fin["warnings"] = ["'utilidad neta' tiene celdas con error (#REF!) en el workbook"]
+    out = tmp_path / "w.xlsx"
+    write_xlsx(fin, {"forecast": {}, "ratios": {}, "variance": {}}, str(out))
+    wb = openpyxl.load_workbook(out)
+    assert "Advertencias" in wb.sheetnames
+    rows = [r[0] for r in wb["Advertencias"].iter_rows(values_only=True)]
+    assert any("#REF!" in (r or "") for r in rows)

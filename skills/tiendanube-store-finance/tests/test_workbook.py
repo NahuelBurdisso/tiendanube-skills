@@ -55,3 +55,41 @@ def test_parse_workbook_selects_latest_year(tmp_path):
     assert fin["months"] == ["Enero","Febrero"]
     assert fin["incomeStatement"]["monthly"]["ventas"] == [300,400]   # 2026 only
     assert fin["cashFlow"]["monthly"]["ingresos"] == [3,4]
+
+def test_sibling_block_without_year_row_does_not_collapse(tmp_path):
+    import openpyxl
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Resultados"
+    # ESTADO: 2-year, year row 10, months row 11
+    ws.cell(9,1,"ESTADO DE RESULTADOS")
+    for i,y in enumerate([2025,2025,2026,2026]): ws.cell(10,2+i,y)
+    for i,mn in enumerate(["Enero","Febrero","Enero","Febrero"]): ws.cell(11,2+i,mn)
+    ws.cell(12,1,"Ventas")
+    for i,v in enumerate([10,20,300,400]): ws.cell(12,2+i,v)
+    # FLUJOS: single-year, NO year row (month header right under anchor)
+    ws.cell(1,1,"FLUJOS DE DINERO")
+    for i,mn in enumerate(["Enero","Febrero"]): ws.cell(2,2+i,mn)
+    ws.cell(3,1,"Ingresos"); ws.cell(3,2,7); ws.cell(3,3,8)
+    p = tmp_path/"sib.xlsx"; wb.save(str(p))
+    from workbook import parse_workbook
+    fin = parse_workbook(str(p))
+    assert fin["year"] == 2026
+    assert fin["incomeStatement"]["monthly"]["ventas"] == [300,400]
+    # sibling FLUJOS must NOT collapse to []
+    assert fin["cashFlow"]["monthly"]["ingresos"] == [7,8]
+
+def test_text_year_headers_are_parsed(tmp_path):
+    import openpyxl
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Resultados"
+    ws.cell(9,1,"ESTADO DE RESULTADOS")
+    for i,y in enumerate(["2025","2025","2026","2026"]): ws.cell(10,2+i,y)  # TEXT years
+    for i,mn in enumerate(["Enero","Febrero","Enero","Febrero"]): ws.cell(11,2+i,mn)
+    ws.cell(12,1,"Ventas")
+    for i,v in enumerate([10,20,300,400]): ws.cell(12,2+i,v)
+    ws.cell(1,1,"FLUJOS DE DINERO")
+    for i,mn in enumerate(["Enero","Febrero"]): ws.cell(2,2+i,mn)
+    ws.cell(3,1,"Ingresos"); ws.cell(3,2,1); ws.cell(3,3,1)
+    p = tmp_path/"txt.xlsx"; wb.save(str(p))
+    from workbook import parse_workbook
+    fin = parse_workbook(str(p))
+    assert fin["year"] == 2026
+    assert fin["incomeStatement"]["monthly"]["ventas"] == [300,400]  # not all 4 summed

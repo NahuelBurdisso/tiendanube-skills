@@ -38,5 +38,12 @@ def write_xlsx(fin, results, out_path):
         act, pri = li.get("actual", 0), li.get("prior_year", 0)
         d = act - (pri or 0); dp = (d / pri) if pri else 0
         vt.append([li.get("name"), act, pri, d, dp])
+    # --- Advertencias de datos (if any) ---
+    warns = fin.get("warnings") or []
+    if warns:
+        nt = wb.create_sheet("Advertencias")
+        nt.append(["Advertencias de datos"])
+        for w in warns:
+            nt.append([w])
     wb.save(out_path)
     return out_path

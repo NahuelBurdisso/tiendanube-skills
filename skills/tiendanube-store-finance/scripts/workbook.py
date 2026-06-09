@@ -54,10 +54,16 @@ def _target_year(years, ventas_full):
     active = [y for y, s in sums.items() if s]
     return max(active) if active else max(labeled)
 
-def _offsets(years, n, target):
-    if target is None:
-        return list(range(n))
-    return [i for i in range(n) if i < len(years) and years[i] == target]
+def _offsets_for(block, target):
+    """Column offsets for `target` year in a block. If the block has no labeled
+    years (or none match target), fall back to its latest 12 columns (multi-col)
+    or all columns — never collapse to empty."""
+    n = len(block["months"])
+    if target is not None and block.get("years"):
+        offs = [i for i in range(n) if i < len(block["years"]) and block["years"][i] == target]
+        if offs:
+            return offs
+    return list(range(n - 12, n)) if n > 12 else list(range(n))
 
 def _slice(block, offsets):
     months = [block["months"][i] for i in offsets]
@@ -86,10 +92,10 @@ def parse_workbook(path, sheet="Resultados"):
 
     target = _target_year(isb["years"], isb["lines"].get("ventas", []))
 
-    is_months, is_lines, is_raw = _slice(isb, _offsets(isb["years"], len(isb["months"]), target))
-    _, cf_lines, _ = _slice(cfb, _offsets(cfb["years"], len(cfb["months"]), target))
+    is_months, is_lines, is_raw = _slice(isb, _offsets_for(isb, target))
+    _, cf_lines, _ = _slice(cfb, _offsets_for(cfb, target))
     if beb:
-        _, be_lines, _ = _slice(beb, _offsets(beb["years"], len(beb["months"]), target))
+        _, be_lines, _ = _slice(beb, _offsets_for(beb, target))
         be_margin = be_lines.get("margen bruto", [])
     else:
         be_margin = []

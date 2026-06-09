@@ -86,7 +86,7 @@ def to_variance_input(fin, company=None):
                 "name": name,
                 "type": _VAR_TYPES.get(key, "expense"),
                 "actual": series[-1],
-                "prior_year": series[-2],
+                "prior_year": series[-2],  # prior MONTH (period-over-period; the template has no budget)
             })
     return {"company": company or fin.get("storeName") or "Cliente",
             "period": (fin["months"][-1] if fin["months"] else "Actual"),

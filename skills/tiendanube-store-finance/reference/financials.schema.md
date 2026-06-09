@@ -7,6 +7,7 @@ Canonical, read-not-recomputed financials from the accounting workbook.
 - `storeName` string | null
 - `currency` string (e.g. "ARS")
 - `months` array of month names actually present (≤12)
+- `year` int | null — the analysis year selected from a multi-year workbook (latest year with data)
 - `incomeStatement.monthly` arrays (one per month) for: ventas, costoReposicion,
   comisiones, utilidadBruta, costosFijos, amortizacion, utilidadOperativa,
   gastosVariables, utilidadNeta
