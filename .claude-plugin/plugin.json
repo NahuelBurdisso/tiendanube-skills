@@ -1,0 +1,9 @@
+{
+  "name": "tiendanube-skills",
+  "version": "0.1.0",
+  "description": "Integrated Claude Code skill family for Tienda Nube / Nuvemshop stores: platform/dev/auth, canonical data extraction, audit reports, and financial forecasting.",
+  "author": {
+    "name": "Nahuel Burdisso"
+  },
+  "skills": "./skills"
+}
