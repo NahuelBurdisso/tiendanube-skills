@@ -15,12 +15,19 @@ def gate_tieout(fin):
             raise GateError(f"Tie-out {key}: anual {annual} ≠ Σ mensual {summed}.")
 
 def gate_composition(fin):
-    for series in fin["incomeStatement"]["monthly"].values():
-        for x in series:
-            t = x.get("transforms", [])
-            if len(t) != len(set(t)):
-                raise GateError("Composición: una partida fue reexpresada dos veces "
-                                "(transforms duplicados).")
+    """No figure may carry a duplicated transform (e.g. restated twice). Scans the
+    income statement (monthly + annual) and the cash flow."""
+    blocks = [fin.get("incomeStatement", {}).get("monthly", {}),
+              fin.get("incomeStatement", {}).get("annual", {}),
+              fin.get("cashFlow", {}).get("monthly", {})]
+    for block in blocks:
+        for v in block.values():
+            for x in (v if isinstance(v, list) else [v]):
+                if isinstance(x, dict):
+                    t = x.get("transforms", [])
+                    if len(t) != len(set(t)):
+                        raise GateError("Composición: una partida fue reexpresada dos veces "
+                                        "(transforms duplicados).")
 
 def gate_reexpresion(fin):
     if fin.get("baseMonth") is None:
