@@ -140,6 +140,54 @@ def cashflow(net, cumulative, labels, accent, warm, neg_col, money, w=540, h=172
     return "".join(out) + "</svg>"
 
 
+def dual_bars(labels, nominal, real, accent, warm, money, w=540, h=160, pad=26):
+    """Paired nominal vs real bars per period — the headline 'pesos corrientes vs
+    moneda de cierre' comparison. `real` entries may be None (IPC gap) → drawn as the
+    nominal bar only, no real twin."""
+    allv = [v for v in (list(nominal) + [r for r in real if r is not None]) if v is not None]
+    mx = max(allv + [1])
+    n = len(labels)
+    gw = (w - pad) / n
+    bw = gw * 0.66 / 2
+    base = h - pad
+    out = [f'<svg viewBox="0 0 {w} {h + 26}" class="chart">'
+           f'<line x1="{pad}" y1="{base}" x2="{w}" y2="{base}" stroke="#D9CFBE"/>']
+    for i, lb in enumerate(labels):
+        gx = pad + i * gw + gw * 0.17
+        pairs = [(nominal[i] if i < len(nominal) else 0, accent),
+                 (real[i] if i < len(real) else None, warm)]
+        for si, (v, col) in enumerate(pairs):
+            if v is None:
+                continue
+            bh = (v / mx) * (h - pad)
+            out.append(f'<rect x="{gx + si * bw:.1f}" y="{base - bh:.1f}" width="{bw * 0.86:.1f}" '
+                       f'height="{max(0, bh):.1f}" fill="{col}" rx="1"/>')
+        out.append(_t(gx + bw, base + 10, lb, 6.2))
+    for lx0, nm, col in ((pad, "Nominal", accent), (pad + 80, "Real (cierre)", warm)):
+        out.append(f'<rect x="{lx0:.0f}" y="4" width="7" height="7" fill="{col}" rx="1"/>')
+        out.append(_t(lx0 + 10, 10.5, nm, 7, "#2A211A", anchor="start", weight="500"))
+    return "".join(out) + "</svg>"
+
+
+def tornado(items, accent, money, w=540, rowh=18, pad=26):
+    """Horizontal bars sorted by |value| desc — levers ranked by impact.
+    items = [(label, value)]."""
+    items = sorted(items, key=lambda kv: abs(kv[1]), reverse=True)
+    mx = max([abs(v) for _, v in items] + [1])
+    h = pad + rowh * len(items) + 6
+    barx = 150.0
+    out = [f'<svg viewBox="0 0 {w} {h}" class="chart">']
+    for i, (lb, v) in enumerate(items):
+        y = pad + i * rowh
+        bw = (abs(v) / mx) * (w - barx - 70)
+        out.append(_t(barx - 6, y + rowh * 0.62, lb, 7, "#2A211A", anchor="end", weight="500"))
+        out.append(f'<rect x="{barx}" y="{y + 2:.1f}" width="{bw:.1f}" height="{rowh - 6}" '
+                   f'fill="{accent}" rx="1"/>')
+        out.append(_t(barx + bw + 4, y + rowh * 0.62, money(v), 6.6, accent,
+                      anchor="start", font="Bodoni Moda", weight="600"))
+    return "".join(out) + "</svg>"
+
+
 def grouped_bars(groups, series_names, colors, accent, money, w=540, h=160, pad=26):
     """Grouped vertical bars. groups = [(group_label, [v1, v2, ...])] one value per
     series. Used for base/bull/bear scenario comparison."""
