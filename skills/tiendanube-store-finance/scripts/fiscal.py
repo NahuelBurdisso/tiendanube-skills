@@ -26,3 +26,22 @@ def ri_bridge(resultado_antes, ventas, compras_gravadas, cfg):
         "ganancias_nota": "Estimación por alícuota efectiva — no es una liquidación de Ganancias.",
         "resultadoDespues": resultado_antes - iibb - ganancias,
     }
+
+def monotributo_status(categoria, facturacion_anual_nominal, tables):
+    cats = tables["monotributo"]["categorias"]
+    techo_max = max(c["techoFacturacionAnual"] for c in cats.values())
+    if facturacion_anual_nominal > techo_max:
+        raise ValueError(
+            f"Facturación anual nominal {facturacion_anual_nominal:,.0f} supera el techo máximo "
+            f"de Monotributo ({techo_max:,.0f}): el contribuyente quedaría EXCLUIDO. "
+            f"Configurar régimen 'responsable_inscripto'.")
+    c = cats[categoria]
+    techo = c["techoFacturacionAnual"]
+    return {
+        "categoria": categoria,
+        "cuotaMensualTotal": c["cuotaMensualTotal"],
+        "techoFacturacionAnual": techo,
+        "headroom": techo - facturacion_anual_nominal,
+        "proximidad": (facturacion_anual_nominal / techo) if techo else 0.0,
+        "resolucion": tables["monotributo"].get("resolucion"),
+    }

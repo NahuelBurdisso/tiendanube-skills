@@ -20,3 +20,18 @@ def test_ri_bridge_estimacion():
     assert round(b["ganancias"], 2) == 247.5             # (1000-175)*.30
     assert round(b["resultadoDespues"], 2) == round(1000 - 175 - 247.5, 2)
     assert b["ganancias_nota"].startswith("Estimación")
+
+TABLES = {"monotributo": {"resolucion": "test", "categorias": {
+    "A": {"techoFacturacionAnual": 1000000, "cuotaMensualTotal": 30000},
+    "H": {"techoFacturacionAnual": 9000000, "cuotaMensualTotal": 90000},
+    "K": {"techoFacturacionAnual": 30000000, "cuotaMensualTotal": 300000}}}}
+
+def test_monotributo_proximity_uses_nominal():
+    r = fiscal.monotributo_status(categoria="H", facturacion_anual_nominal=8500000, tables=TABLES)
+    assert r["cuotaMensualTotal"] == 90000
+    assert round(r["headroom"], 2) == 500000.0
+    assert r["proximidad"] > 0.9
+
+def test_monotributo_over_max_hard_errors():
+    with pytest.raises(ValueError):
+        fiscal.monotributo_status(categoria="K", facturacion_anual_nominal=31000000, tables=TABLES)
