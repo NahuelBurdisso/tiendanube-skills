@@ -1,9 +1,24 @@
 """Assemble the canonical financials.json from parsed workbook blocks."""
 from measures import fact, nom
+from labels import MONTHS, normalize
 
 SCHEMA_VERSION = "2.0"
 
+_MONTH_NUM = {normalize(m): i + 1 for i, m in enumerate(MONTHS)}
+
 def _sum(xs): return float(sum(nom(x) for x in xs)) if xs else 0.0
+
+def _month_keys(months, year):
+    """Map Spanish month names + year -> 'YYYY-MM' keys for IPC lookup.
+    None per slot when the year is unlabeled or a month name doesn't resolve —
+    restatement then degrades that month to nominal-only with a warning."""
+    if not year:
+        return [None] * len(months)
+    keys = []
+    for m in months:
+        num = _MONTH_NUM.get(normalize(m))
+        keys.append(f"{int(year):04d}-{num:02d}" if num else None)
+    return keys
 
 def build_financials(parsed, currency="ARS", store_name=None):
     raw = parsed["incomeStatement"]["monthly"]
@@ -18,6 +33,10 @@ def build_financials(parsed, currency="ARS", store_name=None):
         if v:
             active = i + 1
     annualized_ventas = (nom(annual.get("ventas", fact(0.0))) / active * 12) if active else 0.0
+    # cash-flow lines become measures too, so the restatement layer can fill their `real`.
+    # break-even margen bruto stays a ratio (not money) — never restated.
+    cf_raw = parsed["cashFlow"]["monthly"]
+    cash_flow = {"monthly": {k: [fact(v or 0) for v in series] for k, series in cf_raw.items()}}
     return {
         "schemaVersion": SCHEMA_VERSION,
         "baseMonth": None,
@@ -25,11 +44,12 @@ def build_financials(parsed, currency="ARS", store_name=None):
         "storeName": store_name,
         "currency": currency,
         "months": parsed["months"],
+        "monthKeys": _month_keys(parsed["months"], parsed.get("year")),
         "year": parsed.get("year"),
         "activeMonths": active,
         "annualizedVentas": annualized_ventas,
         "incomeStatement": {"monthly": m, "annual": annual},
-        "cashFlow": parsed["cashFlow"],
+        "cashFlow": cash_flow,
         "breakEven": parsed["breakEven"],
         "balanceSheetPartial": {"inventory": None, "accountsReceivable": None,
                                 "accountsPayable": None},

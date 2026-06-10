@@ -61,3 +61,27 @@ def test_restate_forecast_month_uses_projected_inflation():
     # Apr projected index = 121*1.05 = 127.05; coef = 121/127.05; real = 100*coef ≈ 95.24
     assert abs(out[1]["real"] - (100 * 121 / (121 * 1.05))) < 1e-6
     assert "projected" in out[1]["transforms"]
+
+
+def test_restate_fin_sets_basemonth_and_real(sample_financials_v2):
+    from measures import real_or_nom
+    fin = restatement.restate(sample_financials_v2, fin_cfg={})
+    assert fin["baseMonth"] is not None                       # closing month of the window
+    v0 = fin["incomeStatement"]["monthly"]["ventas"][0]
+    assert v0["real"] is not None                             # Jan restated to cierre
+    assert "restated" in v0["transforms"]
+    monthly = fin["incomeStatement"]["monthly"]["ventas"]
+    annual = fin["incomeStatement"]["annual"]["ventas"]
+    # annual real == sum of restated monthly real
+    assert abs(annual["real"] - sum(real_or_nom(x) for x in monthly)) < 1e-6
+
+
+def test_restate_degrades_without_year(sample_parsed):
+    # a model whose months don't map to IPC (year stripped) -> all-nominal + warning, no crash
+    from financials import build_financials
+    sp = dict(sample_parsed); sp["year"] = None
+    fin = build_financials(sp)
+    fin = restatement.restate(fin, fin_cfg={})
+    assert fin["baseMonth"] is None
+    assert fin["incomeStatement"]["monthly"]["ventas"][0]["real"] is None
+    assert any("nominal" in w.lower() for w in fin["warnings"])

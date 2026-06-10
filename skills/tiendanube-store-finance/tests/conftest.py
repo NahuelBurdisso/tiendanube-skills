@@ -28,6 +28,10 @@ def fixture_workbook(tmp_path):
         5: ("Egresos",  [60]*12),
         6: ("TOTAL",    [40]*12),
     })
+    # year row directly above the month header (row 10) so monthKeys resolve to
+    # 2025-01..2025-12 — all within the bundled IPC series (reexpresión testable).
+    for i in range(12):
+        ws.cell(10, 2 + i, 2025)
     _write_block(ws, 9, "ESTADO DE RESULTADOS", 11, {
         12: ("Ventas",               [1000]*12),
         13: ("Costo reposición",     [400]*12),

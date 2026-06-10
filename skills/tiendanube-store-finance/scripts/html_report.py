@@ -122,8 +122,8 @@ def build_html(fin, results, cfg):
     loss_months = [am[i] for i in range(len(am)) if i < len(un_ser) and un_ser[i] < 0]
 
     # ---- cash flow (from Flujos de Dinero) ----
-    cf_total = (fin.get("cashFlow", {}).get("monthly", {}).get("total", []) or [])[:active]
-    cf_in = (fin.get("cashFlow", {}).get("monthly", {}).get("ingresos", []) or [])[:active]
+    cf_total = [nom(x) for x in (fin.get("cashFlow", {}).get("monthly", {}).get("total", []) or [])[:active]]
+    cf_in = [nom(x) for x in (fin.get("cashFlow", {}).get("monthly", {}).get("ingresos", []) or [])[:active]]
     cum, run = [], 0.0
     for x in cf_total:
         run += x

@@ -254,9 +254,9 @@ def _build_flujo(wb, fin, results):
     months      = fin["months"]
     active      = fin.get("activeMonths") or len(months)
     cf_monthly  = fin.get("cashFlow", {}).get("monthly", {})
-    ingresos    = cf_monthly.get("ingresos", [])
-    egresos     = cf_monthly.get("egresos",  [])
-    totales     = cf_monthly.get("total",    [])
+    ingresos    = [nom(x) for x in cf_monthly.get("ingresos", [])]
+    egresos     = [nom(x) for x in cf_monthly.get("egresos",  [])]
+    totales     = [nom(x) for x in cf_monthly.get("total",    [])]
 
     row = 1
     for col, val in enumerate(["Mes", "Ingresos", "Egresos", "Neto", "Acumulado"], 1):

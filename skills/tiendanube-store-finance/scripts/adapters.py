@@ -55,7 +55,7 @@ def to_ratios_input(fin):
     ap = bsp.get("accountsPayable") or 0
     totals = fin["cashFlow"]["monthly"].get("total", []) or [0]
     active = fin.get("activeMonths") or len(totals)
-    cash = sum(totals[:active])            # net operating cash generated in the period
+    cash = sum(nom(x) for x in totals[:active])   # net operating cash generated in the period
     op_income = nom(a.get("utilidadOperativa", 0.0))
     a_ventas = nom(a.get("ventas", 0.0))
     return {
