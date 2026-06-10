@@ -1,0 +1,33 @@
+{
+  "indice": "IPC nivel general",
+  "descripcion": "IPC Nivel General Nacional. Base diciembre 2016 = 100. Valores mensuales publicados por INDEC.",
+  "fuente": "INDEC — Instituto Nacional de Estadística y Censos de la República Argentina. API datos.gob.ar: https://apis.datos.gob.ar/series/api/series/?ids=148.3_INIVELNAL_DICI_M_26",
+  "fuenteSecundaria": "https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-5-31",
+  "basePeriod": "dic-2016=100",
+  "lastUpdated": "2026-06-09",
+  "vigenciaHasta": "2026-04",
+  "notas": [
+    "Valores extraídos el 2026-06-09 desde la API oficial de Series de Tiempo del Ministerio de Economía (datos.gob.ar), que replica la serie publicada por INDEC.",
+    "El dato de mayo 2026 no está disponible aún al 2026-06-09; INDEC lo publica el 2026-06-11.",
+    "Serie id: 148.3_INIVELNAL_DICI_M_26 — IPC Nivel General Nacional Base dic 2016 Mensual.",
+    "Todos los valores son VERIFICADOS desde la API oficial."
+  ],
+  "serie": {
+    "2025-01": 7864.1257,
+    "2025-02": 8052.9927,
+    "2025-03": 8353.3158,
+    "2025-04": 8585.6078,
+    "2025-05": 8714.4871,
+    "2025-06": 8855.5681,
+    "2025-07": 9023.973,
+    "2025-08": 9193.2441,
+    "2025-09": 9384.0922,
+    "2025-10": 9603.8623,
+    "2025-11": 9841.3581,
+    "2025-12": 10121.3715,
+    "2026-01": 10413.0309,
+    "2026-02": 10714.6255,
+    "2026-03": 11077.0608,
+    "2026-04": 11363.0904
+  }
+}
