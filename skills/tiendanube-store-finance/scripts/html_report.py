@@ -4,6 +4,7 @@ forecast/scenarios, variance and computed recommendations. build_html(fin, resul
 import html as _html
 import charts as ch
 from measures import nom
+from provenance import marks, legend
 
 _CSS = """
 :root{--bg:#F4EFE6;--surface:#FBF8F2;--deep:#EAE2D4;--text:#2A211A;--ink:#1A1512;
@@ -252,12 +253,136 @@ def build_html(fin, results, cfg):
     for key, label, kind in is_rows_def:
         cells = "".join(f"<td class='r'>{M(nom(x))}</td>" for x in m.get(key, [])[:active])
         cls = " class='sub'" if kind == "sub" else (" class='tot'" if kind == "tot" else "")
-        ann_val = nom(a.get(key, 0))
+        ann_meas = a.get(key, 0)
+        ann_val = nom(ann_meas)
+        ann_real = ann_meas.get("real") if isinstance(ann_meas, dict) else None
+        real_cell = (M(ann_real) + marks(ann_meas)) if ann_real is not None else "—"
         is_rows += (f"<tr{cls}><td>{label}</td>{cells}<td class='r'><b>{M(ann_val)}</b></td>"
-                    f"<td class='r'>{M(ann_val*scale)}</td></tr>")
+                    f"<td class='r'>{real_cell}</td><td class='r'>{M(ann_val*scale)}</td></tr>")
 
     def kicker(num, lab):
         return f'<div class="kicker"><span class="num">{num}</span><span class="label">{lab}</span></div>'
+
+    # ===== Reexpresión a moneda de cierre (real vs nominal) =====
+    base = fin.get("baseMonth")
+    rv_ser = [x.get("real") if isinstance(x, dict) else None for x in m.get("ventas", [])[:active]]
+    ventas_meas = a.get("ventas")
+    real_ann = ventas_meas.get("real") if isinstance(ventas_meas, dict) else None
+    real_pts = [r for r in rv_ser if r is not None]
+    if base and real_pts:
+        dual = ch.dual_bars(am, v_ser, rv_ser, accent, warm, M, h=120)
+        nom_growth = (v_ser[-1] / v_ser[0] - 1) if len(v_ser) >= 2 and v_ser[0] else 0.0
+        real_growth = (real_pts[-1] / real_pts[0] - 1) if len(real_pts) >= 2 and real_pts[0] else 0.0
+        real_ann_txt = M(real_ann) + "ʳ" if real_ann is not None else "n/d (período incompleto en la serie IPC)"
+        reexp_section = f"""<div class="page section-open">
+  {kicker('02', 'Reexpresión a moneda de cierre')}
+  <h2 class="report">Pesos corrientes vs. moneda de cierre.</h2>
+  <p class="lede">Las cifras nominales mezclan pesos de poder adquisitivo distinto. Reexpresadas a la moneda
+  de <b>{base}</b> con el IPC INDEC nivel general, se comparan en términos reales. Esto homogeneiza el Estado
+  de Resultados — <b>no</b> es un ajuste integral RT 6 (no calcula RECPAM); ver Supuestos.</p>
+  <div class="chartbox"><div class="ct">Ventas mensuales: Nominal vs Real (moneda de cierre {base})</div>{dual}</div>
+  <div class="grid2">
+    <div><div class="bignum">{P(nom_growth)}</div><p class="note">Crecimiento <b>nominal</b> del período.</p></div>
+    <div><div class="bignum">{P(real_growth)}</div><p class="note">Crecimiento <b>real</b> (moneda de cierre). Si es
+    menor que el nominal, parte de la "suba" es solo inflación.</p></div>
+  </div>
+  <p class="note">Ventas anuales reexpresadas: <b>{real_ann_txt}</b> · nominal {M(V)}.</p>
+</div>"""
+    else:
+        reexp_section = f"""<div class="page section-open">
+  {kicker('02', 'Reexpresión a moneda de cierre')}
+  <h2 class="report">Pesos corrientes vs. moneda de cierre.</h2>
+  <p class="lede">No se pudo reexpresar el período: faltan meses en la serie IPC disponible, o el año no está
+  etiquetado. Se reportan valores <b>nominales</b>. Ver Advertencias.</p>
+</div>"""
+
+    # ===== Posición fiscal =====
+    fz = fin.get("fiscal") or {}
+    reg = fz.get("regimen")
+    if reg == "responsable_inscripto":
+        iva = fz.get("iva", {}); br = fz.get("bridge", {})
+        fiscal_body = f"""<table>
+    <tr><th>Concepto</th><th class="r">{sym}/período</th><th>Nota</th></tr>
+    <tr><td>IVA débito fiscal</td><td class="r">{M(iva.get('debito',0))}</td><td>Sobre ventas</td></tr>
+    <tr><td>IVA crédito fiscal</td><td class="r">{M(iva.get('credito',0))}</td><td>Estimado s/compras gravadas</td></tr>
+    <tr class="sub"><td>Posición IVA</td><td class="r">{M(iva.get('posicion',0))}</td><td>Flujo fiscal — no integra el Resultado</td></tr>
+    <tr><td>Ingresos Brutos (IIBB)</td><td class="r">{M(br.get('iibb',0))}</td><td>Gasto sobre ventas</td></tr>
+    <tr><td>Impuesto a las Ganancias</td><td class="r">{M(br.get('ganancias',0))}</td><td>Estimación por alícuota efectiva</td></tr>
+    <tr class="tot"><td>Resultado después de impuestos</td><td class="r">{M(br.get('resultadoDespues',0))}</td><td>Puente sobre resultado antes de impuestos</td></tr>
+  </table>
+  <div class="callout warm"><h4>Alcance fiscal</h4><p class="note">{esc(br.get('ganancias_nota',''))}
+  La posición de IVA es un flujo fiscal y no integra el Resultado. Convenio Multilateral (IIBB
+  multi-jurisdicción) y la liquidación completa de Ganancias quedan fuera de alcance.</p></div>"""
+    elif reg == "monotributo":
+        mt = fz.get("monotributo", {}); prox = mt.get("proximidad", 0) or 0
+        fiscal_body = f"""<div class="grid2">
+    <div><div class="bignum">{M(mt.get('cuotaMensualTotal',0))}</div><p class="note">Cuota mensual Monotributo,
+    categoría {mt.get('categoria','')}.</p></div>
+    <div><div class="bignum">{P(prox)}</div><p class="note">Proximidad al techo (nominal
+    {M(mt.get('techoFacturacionAnual',0))}); headroom {M(mt.get('headroom',0))}.</p></div>
+  </div>
+  <div class="callout {'bad' if prox>=0.85 else 'warm'}"><h4>Categoría</h4><p class="note">Facturación y techos
+  en pesos <b>nominales</b> (los topes AFIP son nominales; no se reexpresan).
+  {'Cerca del techo: planificar recategorización o pase a Responsable Inscripto.' if prox>=0.85 else 'Con margen respecto del techo.'}</p></div>"""
+    else:
+        fiscal_body = ('<p class="note">Régimen fiscal no configurado: capa fiscal omitida. Definir '
+                       '<code>fiscal.regimen</code> (monotributo / responsable_inscripto) en la configuración.</p>')
+    fiscal_section = f"""<div class="page section-open">
+  {kicker('06', 'Posición fiscal')}
+  <h2 class="report">La carga impositiva, estimada.</h2>
+  <p class="lede">Posición fiscal según el régimen. Los impuestos se calculan sobre pesos <b>nominales</b>
+  (base AFIP); las cifras de Ganancias son una <b>estimación</b> por alícuota efectiva, no una liquidación.</p>
+  {fiscal_body}
+</div>"""
+
+    # ===== Palancas / Acciones =====
+    lv = results.get("levers") or {}
+    levs = lv.get("levers", [])
+    if levs:
+        torn = ch.tornado([(l["titulo"], l["impacto"]["real"]) for l in levs], accent, M)
+        lev_rows = "".join(
+            f'<tr><td><b>{esc(l["titulo"])}</b><br><span class="note">{esc(l["accion"])}</span></td>'
+            f'<td class="r">{M(l["impacto"]["real"])}</td>'
+            f'<td><span class="pill p-info">{esc(l["confianza"])}</span></td>'
+            f'<td class="note">{esc(l["supuesto"])}</td></tr>' for l in levs)
+        levers_body = f"""<div class="chartbox"><div class="ct">Palancas por impacto estimado</div>{torn}</div>
+  <table><tr><th>Palanca / acción</th><th class="r">Impacto/mes</th><th>Confianza</th><th>Supuesto</th></tr>{lev_rows}</table>
+  <p class="note"><b>{esc(lv.get('nota',''))}</b></p>"""
+    else:
+        levers_body = ('<p class="note">No se detectaron palancas accionables con los umbrales actuales: los '
+                       'indicadores del período están dentro de rango. <b>Impactos no aditivos.</b></p>')
+    levers_section = f"""<div class="page section-open">
+  {kicker('09', 'Palancas / Acciones')}
+  <h2 class="report">De los números a las decisiones.</h2>
+  <p class="lede">Acciones priorizadas y cuantificadas, cada una atada a la cifra que la dispara y medida en
+  términos reales. Se estiman de forma independiente y pueden solaparse: <b>no son aditivas</b>, no sumar.</p>
+  {levers_body}
+</div>"""
+
+    # ===== Ratios =====
+    ratios = results.get("ratios") or {}
+    ratio_rows = ""
+    for cat, metrics in (ratios.items() if isinstance(ratios, dict) else []):
+        if not isinstance(metrics, dict):
+            continue
+        for k, v in metrics.items():
+            try:
+                val = f"{float(v):.2f}".replace(".", ",")
+            except (TypeError, ValueError):
+                val = esc(str(v))
+            ratio_rows += f'<tr><td>{esc(str(cat))}</td><td>{esc(str(k))}</td><td class="r">{val}</td></tr>'
+    ratios_table = (f'<table><tr><th>Categoría</th><th>Indicador</th><th class="r">Valor</th></tr>{ratio_rows}</table>'
+                    if ratio_rows else '<p class="note">Ratios no disponibles para este período.</p>')
+    ratios_section = f"""<div class="page section-open">
+  {kicker('10', 'Ratios')}
+  <h2 class="report">Indicadores financieros.</h2>
+  <p class="lede">Ratios de rentabilidad, liquidez y eficiencia sobre los estados del período. Se omiten los de
+  endeudamiento y de mercado (un comercio privado no tiene deuda, patrimonio ni cotización).</p>
+  {ratios_table}
+</div>"""
+
+    # provenance legend over the annual measures actually shown
+    prov_legend = legend([a[k] for k in a if isinstance(a.get(k), dict)])
 
     head_period = f"{active} meses de {year} (YTD)"
     css = _CSS.replace("__ACCENT__", accent).replace("__WARM__", warm)
@@ -271,7 +396,7 @@ def build_html(fin, results, cfg):
                       f'<th class="r">Δ</th><th class="r">Δ%</th></tr>{var_rows}</table>') if var_rows else \
         '<p class="note">Variación no disponible (se requieren ≥2 meses con datos).</p>'
     cash_section = (f'''<div class="page section-open">
-  {kicker('03', 'Caja y flujo de fondos')}
+  {kicker('04', 'Caja y flujo de fondos')}
   <h2 class="report">Una cosa es ganar; otra, tener la plata.</h2>
   <p class="lede">El resultado contable y la caja no son lo mismo: se puede ser rentable y aun así quedarse
   corto de efectivo si la cobranza llega tarde. Esta es la película del dinero real del período.</p>
@@ -321,17 +446,20 @@ def build_html(fin, results, cfg):
 </div>
 
 <div class="page section-open">
-  {kicker('01', 'Estado de resultados')}
+  {kicker('01', 'Estado de Resultados')}
   <h2 class="report">De cada peso vendido, qué queda.</h2>
-  <p class="lede">El estado de resultados mensual (conciliado con el workbook), su total YTD y el valor
-  anualizado. La cascada muestra, paso a paso, cómo la facturación se convierte en utilidad neta.</p>
-  <table><tr><th>Concepto</th>{head_m}<th class="r">YTD</th><th class="r">Anual est.</th></tr>{is_rows}</table>
+  <p class="lede">El estado de resultados mensual (conciliado con el workbook), su total YTD en pesos
+  <b>nominales</b> y <b>reales</b> (moneda de cierre{f' {base}' if base else ''}), y el valor anualizado.
+  La cascada muestra, paso a paso, cómo la facturación se convierte en utilidad neta.</p>
+  <table><tr><th>Concepto</th>{head_m}<th class="r">YTD Nominal</th><th class="r">YTD Real</th><th class="r">Anual est.</th></tr>{is_rows}</table>
   <div class="chartbox"><div class="ct">Facturación mensual — pico en dorado</div>{rev_chart}</div>
   <div class="chartbox"><div class="ct">Cascada de resultados — Ventas → Utilidad neta (concilia al peso)</div>{wf}</div>
 </div>
 
+{reexp_section}
+
 <div class="page section-open">
-  {kicker('02', 'Rentabilidad y costos')}
+  {kicker('03', 'Rentabilidad y costos')}
   <h2 class="report">Márgenes y estructura de costos.</h2>
   <p class="lede">Cómo evolucionan los márgenes mes a mes y en qué se va cada peso de facturación.
   El peso de las comisiones y de los costos fijos define la rentabilidad final.</p>
@@ -352,7 +480,7 @@ def build_html(fin, results, cfg):
 {cash_section}
 
 <div class="page section-open">
-  {kicker('04', 'Punto de equilibrio')}
+  {kicker('05', 'Punto de equilibrio')}
   <h2 class="report">Cuánto hay que vender para no perder.</h2>
   <p class="lede">El punto de equilibrio es la facturación a la que el margen de contribución (el {P(mb)} que deja
   cada venta) cubre exactamente los costos fijos y la amortización. Asume que costo de mercadería y comisiones
@@ -368,8 +496,10 @@ def build_html(fin, results, cfg):
     {'por encima' if ann_ventas>=be_ventas else 'por debajo'} del equilibrio.</p></div>
 </div>
 
+{fiscal_section}
+
 <div class="page section-open">
-  {kicker('05', 'Proyección y escenarios')}
+  {kicker('07', 'Proyección y escenarios')}
   <h2 class="report">Hacia dónde va el negocio.</h2>
   <p class="lede">Proyección construida sobre la tendencia y estacionalidad reales de los {active} meses con
   datos. Tres escenarios acotan el rango. Con pocos meses, conviene leerla con cautela.
@@ -379,15 +509,19 @@ def build_html(fin, results, cfg):
 </div>
 
 <div class="page section-open">
-  {kicker('06', 'Variación mensual')}
+  {kicker('08', 'Variación mensual')}
   <h2 class="report">Qué cambió respecto al mes anterior.</h2>
   <p class="lede">Variación período contra período (último mes con datos vs. el previo). El workbook no lleva
   presupuesto, por lo que la comparación es mes contra mes, no contra objetivo.</p>
   {var_table_html}
 </div>
 
+{levers_section}
+
+{ratios_section}
+
 <div class="page section-open">
-  {kicker('07', 'Conclusiones')}
+  {kicker('11', 'Conclusiones')}
   <h2 class="report">Qué hacer con estos números.</h2>
   <p class="lede">Recomendaciones concretas, cada una atada a una cifra del informe y cuantificada en pesos
   donde se puede.</p>
@@ -395,7 +529,7 @@ def build_html(fin, results, cfg):
 </div>
 
 <div class="page section-open">
-  {kicker('08', 'Supuestos y datos')}
+  {kicker('12', 'Supuestos y datos')}
   <h2 class="report">Origen de los números y supuestos.</h2>
   <p class="lede">Para que cada cifra sea defendible: de dónde sale y qué se asumió.</p>
   <h3>Origen de los datos</h3>
@@ -408,7 +542,16 @@ def build_html(fin, results, cfg):
     <li>El <b>margen bruto</b> usa el costo efectivo (Ventas − Utilidad bruta), por lo que concilia con el
     estado de resultados e incluye comisiones.</li>
     <li>La <b>proyección</b> y los escenarios son prospectivos: <b>supuesto</b>, no ingreso garantizado.</li>
+    <li>La <b>reexpresión a moneda de cierre</b> usa el IPC INDEC nivel general; reexpresa el Estado de
+    Resultados a la moneda de <b>{base or 'n/d'}</b>. Es una homogeneización del P&amp;L — <b>no</b> calcula
+    <b>RECPAM</b> (Resultado por Exposición a la Inflación): eso queda <b>fuera de alcance</b> por requerir un
+    balance completo con partidas monetarias/no monetarias.</li>
+    <li>La <b>posición fiscal</b> se calcula sobre pesos nominales (base AFIP). Ganancias es una
+    <b>estimación</b> por alícuota efectiva, no una liquidación; el IVA es un flujo fiscal y no integra el
+    Resultado. Topes de Monotributo en pesos nominales.</li>
+    <li>Las <b>palancas</b> se estiman de forma independiente y pueden solaparse: <b>no son aditivas</b>.</li>
   </ul>
+  {f'<p class="note">Referencias: {prov_legend}</p>' if prov_legend else ''}
   {warn_section}
   <div class="footer-note">{esc(name)} · Informe financiero sobre el workbook del cliente · período {head_period}.
   Estados conciliados; proyección, ratios y recomendaciones son estimaciones con supuestos explícitos.</div>
