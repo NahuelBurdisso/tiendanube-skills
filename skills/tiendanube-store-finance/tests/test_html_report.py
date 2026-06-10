@@ -32,3 +32,12 @@ def test_report_has_expert_sections_and_charts(fixture_workbook):
         assert section in html, f"missing section: {section}"
     assert html.count("<svg") >= 3      # revenue bars + waterfall + margin lines at minimum
     assert "Ritmo anualizado" in html
+
+
+def test_html_does_not_leak_measure_dicts(fixture_workbook):
+    # schema-2.0 money lines are measure dicts; the report must unwrap them via nom(),
+    # never str() a {'nominal': ...} dict into the output.
+    fin = build_financials(parse_workbook(fixture_workbook))
+    html = build_html(fin, {"ratios": {}, "forecast": {}, "variance": {}},
+                      {"brand": {"name": "ACME"}})
+    assert "'nominal'" not in html and "{'nominal" not in html

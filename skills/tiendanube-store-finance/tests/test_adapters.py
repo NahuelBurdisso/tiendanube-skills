@@ -5,6 +5,17 @@ from adapters import to_forecast_input, to_ratios_input, to_variance_input
 def _fin(fixture_workbook):
     return build_financials(parse_workbook(fixture_workbook))
 
+def test_adapters_emit_plain_floats_not_measures(fixture_workbook):
+    # adapters must unwrap schema-2.0 measures; downstream scripts expect numbers.
+    fin = _fin(fixture_workbook)
+    f_in = to_forecast_input(fin, {"finance": {}})
+    assert all(isinstance(p["revenue"], float) for p in f_in["historical_periods"])
+    r_in = to_ratios_input(fin)
+    assert isinstance(r_in["income_statement"]["revenue"], float)
+    v_in = to_variance_input(fin)
+    assert all(isinstance(i["actual"], float) for i in v_in["line_items"])
+
+
 def test_forecast_input_shape(fixture_workbook):
     cfg = {"forecastPeriods": 12, "scenarios": {
         "base": {"growth_adjustment": 0, "margin_adjustment": 0}}}
