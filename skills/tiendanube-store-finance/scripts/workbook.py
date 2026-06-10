@@ -74,7 +74,7 @@ def _slice(block, offsets):
 _IS = ["Ventas","Costo reposición","Comisiones","Utilidad bruta","Costos fijos",
        "Amortización créditos","Utilidad operativa","Gastos variables","Utilidad neta"]
 _CF = ["Ingresos","Egresos","TOTAL"]
-_BE = ["Margen bruto"]
+_BE = ["Margen bruto", "Facturación necesaria total"]
 
 _IS_KEYS = {
     "ventas":"ventas","costo reposicion":"costoReposicion","comisiones":"comisiones",
@@ -97,8 +97,10 @@ def parse_workbook(path, sheet="Resultados"):
     if beb:
         _, be_lines, _ = _slice(beb, _offsets_for(beb, target))
         be_margin = be_lines.get("margen bruto", [])
+        be_facturacion = be_lines.get("facturacion necesaria total", [])
     else:
         be_margin = []
+        be_facturacion = []
 
     n = len(is_months)
     is_monthly = {cam: is_lines.get(norm, [0]*n) for norm, cam in _IS_KEYS.items()}
@@ -120,6 +122,7 @@ def parse_workbook(path, sheet="Resultados"):
             "ingresos": cf_lines.get("ingresos", [0]*n),
             "egresos":  cf_lines.get("egresos", [0]*n),
             "total":    cf_lines.get("total", [0]*n)}},
-        "breakEven": {"margenBrutoMonthly": be_margin},
+        "breakEven": {"margenBrutoMonthly": be_margin,
+                      "facturacionEquilibrioMonthly": be_facturacion},
         "warnings": warnings,
     }

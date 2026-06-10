@@ -37,6 +37,19 @@ def build_financials(parsed, currency="ARS", store_name=None):
     # break-even margen bruto stays a ratio (not money) — never restated.
     cf_raw = parsed["cashFlow"]["monthly"]
     cash_flow = {"monthly": {k: [fact(v or 0) for v in series] for k, series in cf_raw.items()}}
+    # break-even safety margin — only when the workbook actually fills "facturación necesaria".
+    # If it's blank/0, margenSeguridad stays None (unknown) — never a misleading 100% cushion.
+    be = dict(parsed.get("breakEven", {}))
+    fe_annual = float(sum(be.get("facturacionEquilibrioMonthly", []) or []))
+    if fe_annual > 0 and ventas > 0:
+        be["facturacionEquilibrioAnual"] = fe_annual
+        be["margenSeguridad"] = (ventas - fe_annual) / ventas
+        _SAFE_TARGET = 0.20
+        be["facturacionParaColchon"] = max(0.0, fe_annual / (1 - _SAFE_TARGET) - ventas)
+    else:
+        be["facturacionEquilibrioAnual"] = fe_annual or None
+        be["margenSeguridad"] = None
+        be["facturacionParaColchon"] = None
     return {
         "schemaVersion": SCHEMA_VERSION,
         "baseMonth": None,
@@ -50,7 +63,7 @@ def build_financials(parsed, currency="ARS", store_name=None):
         "annualizedVentas": annualized_ventas,
         "incomeStatement": {"monthly": m, "annual": annual},
         "cashFlow": cash_flow,
-        "breakEven": parsed["breakEven"],
+        "breakEven": be,
         "balanceSheetPartial": {"inventory": None, "accountsReceivable": None,
                                 "accountsPayable": None},
         "drivers": {"topProducts": []},

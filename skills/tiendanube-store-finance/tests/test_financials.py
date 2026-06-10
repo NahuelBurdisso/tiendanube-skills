@@ -49,3 +49,26 @@ def test_active_months_trailing_zeros():
     fin = build_financials(parsed)
     assert fin["activeMonths"] == 2
     assert round(fin["annualizedVentas"]) == 1800   # 300 / 2 * 12
+
+
+def _parsed_with_be(facturacion):
+    keys = ["ventas","costoReposicion","comisiones","utilidadBruta","costosFijos",
+            "amortizacion","utilidadOperativa","gastosVariables","utilidadNeta"]
+    n = len(facturacion) if facturacion else 2
+    mp = {k: [0]*n for k in keys}; mp["ventas"] = [1000]*n
+    return {"months": ["Enero","Febrero"][:n], "year": 2025,
+            "incomeStatement": {"monthly": mp},
+            "cashFlow": {"monthly": {"ingresos":[0]*n,"egresos":[0]*n,"total":[0]*n}},
+            "breakEven": {"margenBrutoMonthly": [], "facturacionEquilibrioMonthly": facturacion},
+            "warnings": []}
+
+def test_break_even_safety_margin_computed():
+    from financials import build_financials
+    fin = build_financials(_parsed_with_be([950, 950]))   # ventas 2000, FE 1900
+    assert abs(fin["breakEven"]["margenSeguridad"] - 0.05) < 1e-9
+    assert fin["breakEven"]["facturacionParaColchon"] > 0   # FE/0.8 - 2000 = 375
+
+def test_break_even_safety_none_when_no_facturacion():
+    from financials import build_financials
+    fin = build_financials(_parsed_with_be([]))            # workbook didn't fill it
+    assert fin["breakEven"]["margenSeguridad"] is None      # never a fake 100% cushion
