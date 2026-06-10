@@ -19,3 +19,45 @@ def test_coef_base_over_month():
 
 def test_missing_month_returns_none():
     assert restatement.coef(IPC, "2026-03", "2026-09") is None
+
+
+# ---------------------------------------------------------------------------
+# Task 2 — restate_series
+# ---------------------------------------------------------------------------
+from measures import fact  # noqa: E402  (importlib path already inserted by _load above)
+
+
+def test_restate_series_per_month_and_sum():
+    months = ["2026-01", "2026-02", "2026-03"]
+    series = [fact(100), fact(100), fact(100)]
+    out, warnings = restatement.restate_series(series, months, IPC, base_month="2026-03")
+    assert [round(m["real"], 4) for m in out] == [121.0, 110.0, 100.0]   # Jan*1.21, Feb*1.10, Mar*1.0
+    assert all("restated" in m["transforms"] for m in out)
+    assert warnings == []
+
+
+def test_restate_missing_month_nulls_and_warns():
+    months = ["2026-01", "2026-09"]
+    series = [fact(100), fact(100)]
+    out, warnings = restatement.restate_series(series, months, IPC, base_month="2026-01")
+    assert out[0]["real"] == 100.0
+    assert out[1]["real"] is None
+    assert any("2026-09" in w for w in warnings)
+
+
+def test_restate_is_idempotent():
+    months = ["2026-01"]; series = [fact(100)]
+    once, _ = restatement.restate_series(series, months, IPC, base_month="2026-01")
+    twice, _ = restatement.restate_series(once, months, IPC, base_month="2026-01")
+    assert twice[0]["transforms"] == ["restated"]   # not doubled
+
+
+def test_restate_forecast_month_uses_projected_inflation():
+    # Apr absent from IPC; project from last actual (Mar=121) at 5%/mo
+    months = ["2026-03", "2026-04"]; series = [fact(100), fact(100)]
+    out, w = restatement.restate_series(series, months, IPC, base_month="2026-03",
+                                        projected_inflation=0.05, last_actual_month="2026-03")
+    assert out[0]["real"] == 100.0
+    # Apr projected index = 121*1.05 = 127.05; coef = 121/127.05; real = 100*coef ≈ 95.24
+    assert abs(out[1]["real"] - (100 * 121 / (121 * 1.05))) < 1e-6
+    assert "projected" in out[1]["transforms"]

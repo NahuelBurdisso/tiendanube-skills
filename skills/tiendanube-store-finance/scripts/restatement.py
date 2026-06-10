@@ -18,3 +18,32 @@ def coef(serie, base_month, month):
     if b is None or v is None or v == 0:
         return None
     return b / v
+
+
+def restate_series(series, months, serie, base_month, projected_inflation=None,
+                   last_actual_month=None):
+    """Fill `real` on each measure. months[i] aligns with series[i].
+    Months past last_actual_month use compounded projected_inflation (tag 'projected').
+    Returns (new_series, warnings)."""
+    out, warnings = [], []
+    for m, meas in zip(months, series):
+        c = coef(serie, base_month, m)
+        tag = "restated"
+        if c is None and projected_inflation is not None and last_actual_month and m > last_actual_month:
+            base_idx = serie.get(base_month)
+            steps = _months_between(last_actual_month, m)
+            proj_idx = serie[last_actual_month] * ((1 + projected_inflation) ** steps)
+            c = (base_idx / proj_idx) if (base_idx is not None and proj_idx) else None
+            tag = "projected"
+        if c is None:
+            warnings.append(f"IPC sin dato para {m}: real no calculado (se muestra solo nominal).")
+            out.append({**meas, "real": None})
+        else:
+            out.append(add_transform({**meas, "real": nom(meas) * c}, tag))
+    return out, warnings
+
+
+def _months_between(a, b):
+    """Integer month gap b-a for 'YYYY-MM' strings."""
+    ay, am = map(int, a.split("-")); by, bm = map(int, b.split("-"))
+    return (by * 12 + bm) - (ay * 12 + am)
