@@ -39,3 +39,17 @@ def test_pipeline_emits_levers(fixture_workbook, tmp_path):
     lv = out["results"]["levers"]
     assert "levers" in lv and "porDriver" in lv
     assert "totalImpacto" not in lv          # never a grand total
+
+
+def test_pipeline_runs_gates(fixture_workbook, tmp_path, monkeypatch):
+    import gates
+    calls = {"n": 0}; real = gates.run_all
+    def spy(fin, cfg):
+        calls["n"] += 1
+        return real(fin, cfg)
+    monkeypatch.setattr(gates, "run_all", spy)
+    cfg = {"brand": {"name": "A"}, "finance": {},
+           "fiscal": {"regimen": "monotributo", "categoriaMonotributo": "A"}}
+    cfg_path = tmp_path / "c.json"; cfg_path.write_text(json.dumps(cfg))
+    run(fixture_workbook, str(cfg_path), str(tmp_path))
+    assert calls["n"] == 1

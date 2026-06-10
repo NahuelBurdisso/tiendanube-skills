@@ -8,6 +8,7 @@ from fiscal import apply_fiscal
 from restatement import restate
 from levers import build_levers
 from measures import nom
+import gates
 from adapters import to_forecast_input, to_ratios_input, to_variance_input
 from run_scripts import run_script
 from ratios_filter import filter_ratios
@@ -23,6 +24,7 @@ def run(workbook_path, config_path, out_dir):
                            store_name=cfg.get("brand", {}).get("name"))
     fin = apply_fiscal(fin, cfg)  # taxes on NOMINAL (AFIP basis)
     fin = restate(fin, fin_cfg)   # reexpresión a moneda de cierre — ALWAYS last
+    fin = gates.run_all(fin, cfg)  # mandatory data-integrity gates (raise on hard failure)
     fin_path = out_dir / "financials.json"; fin_path.write_text(json.dumps(fin, indent=1))
 
     results = {}

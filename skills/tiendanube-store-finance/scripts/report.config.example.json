@@ -8,11 +8,22 @@
     "currencySymbol": "$"
   },
   "finance": {
+    "baseMonth": null,
+    "projectedMonthlyInflation": 0.03,
     "forecastPeriods": 12,
+    "umbrales": { "proximidadMonotributo": 0.85, "margenSeguridad": 0.15 },
     "cashBalance": 0,
     "collectionRate": 1.0,
     "enableDcf": false,
     "wacc": { "risk_free_rate": 0.0, "equity_risk_premium": 0.0, "beta": 1.0,
               "cost_of_debt": 0.0, "tax_rate": 0.0, "debt_weight": 0.0, "equity_weight": 1.0 }
+  },
+  "fiscal": {
+    "regimen": "responsable_inscripto",
+    "categoriaMonotributo": "H",
+    "alicuotaIIBB": 0.035,
+    "alicuotaIVAVentas": 0.21,
+    "alicuotaEfectivaGanancias": 0.30,
+    "proporcionComprasGravadas": 1.0
   }
 }
