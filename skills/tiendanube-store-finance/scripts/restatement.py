@@ -84,13 +84,23 @@ def restate(fin, fin_cfg=None, ref_dir=None):
 
     is_ = fin["incomeStatement"]
     _do(is_["monthly"])
-    # annual real = Σ restated monthly real (null-safe); never nominal × one coef
+    # annual real = Σ restated monthly real over the ACTIVE window — but ONLY when every
+    # active month has a real. A partial sum (some months missing IPC) is NOT comparable to
+    # the full-year nominal and would read as a fake real decline; emit None + a warning instead.
+    incomplete = False
     for key, series in is_["monthly"].items():
-        reals = [x["real"] for x in series if isinstance(x, dict) and x.get("real") is not None]
+        active_slice = series[:active]
+        reals = [x.get("real") for x in active_slice if isinstance(x, dict)]
+        complete = bool(reals) and all(r is not None for r in reals)
         ann = is_["annual"].get(key)
         if isinstance(ann, dict):
-            is_["annual"][key] = add_transform({**ann, "real": (sum(reals) if reals else None)},
-                                               "restated")
+            is_["annual"][key] = add_transform(
+                {**ann, "real": (sum(reals) if complete else None)}, "restated")
+        if not complete:
+            incomplete = True
+    if incomplete and base is not None:
+        warnings.append("Total anual reexpresado no disponible: faltan meses del período en "
+                        "la serie IPC (ver advertencias por mes); se reporta el anual nominal.")
     _do(fin["cashFlow"]["monthly"])
 
     fin["baseMonth"] = base
