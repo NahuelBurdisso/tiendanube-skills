@@ -6,6 +6,8 @@ from workbook import parse_workbook
 from financials import build_financials
 from fiscal import apply_fiscal
 from restatement import restate
+from levers import build_levers
+from measures import nom
 from adapters import to_forecast_input, to_ratios_input, to_variance_input
 from run_scripts import run_script
 from ratios_filter import filter_ratios
@@ -32,9 +34,11 @@ def run(workbook_path, config_path, out_dir):
     var_out = run_script("budget_variance_analyzer.py", var_in, out_dir)
     var_out["line_items"] = var_in["line_items"]  # keep raw pairs for the xlsx tab
     results["variance"] = var_out
+    results["levers"] = build_levers(fin, cfg)
     if fin_cfg.get("enableDcf"):
+        ventas_nom = [nom(x) for x in fin["incomeStatement"]["monthly"]["ventas"]]
         results["dcf"] = run_script("dcf_valuation.py",
-                                    {"historical": {"revenue": fin["incomeStatement"]["monthly"]["ventas"]},
+                                    {"historical": {"revenue": ventas_nom},
                                      "assumptions": {"wacc_inputs": fin_cfg.get("wacc", {})}}, out_dir)
 
     xlsx = out_dir / "store-finance.xlsx"; write_xlsx(fin, results, str(xlsx))

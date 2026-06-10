@@ -99,3 +99,14 @@ def test_existencias_uses_recoverable_value_low_confidence():
     lev = levers.rule_existencias_inmovilizadas(model, {"finance": {}})
     assert lev is not None and lev["confianza"] == "baja"
     assert lev["impacto"]["real"] == 120000
+
+
+def test_colchon_fires_when_margin_of_safety_thin():
+    model = {"breakEven": {"margenSeguridad": 0.05, "facturacionParaColchon": 30000},
+             "incomeStatement": {"monthly": {}, "annual": {}}}
+    lev = levers.rule_colchon_equilibrio(model, {"finance": {}})
+    assert lev is not None and lev["driver"] == "equilibrio" and lev["impacto"]["real"] == 30000
+
+def test_colchon_silent_when_cushion_ok():
+    model = {"breakEven": {"margenSeguridad": 0.5}, "incomeStatement": {"monthly": {}, "annual": {}}}
+    assert levers.rule_colchon_equilibrio(model, {"finance": {}}) is None

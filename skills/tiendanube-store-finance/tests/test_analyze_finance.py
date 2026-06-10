@@ -30,3 +30,12 @@ def test_pipeline_order_fiscal_then_restate(fixture_workbook, tmp_path):
     fin = json.loads(pathlib.Path(out["financials"]).read_text())
     assert "fiscal" in fin and fin["fiscal"]["regimen"] == "monotributo"   # fiscal applied
     assert fin["baseMonth"] is not None                                    # restate ran after
+
+
+def test_pipeline_emits_levers(fixture_workbook, tmp_path):
+    cfg = {"brand": {"name": "ACME"}, "finance": {}}
+    cfg_path = tmp_path / "report.config.json"; cfg_path.write_text(json.dumps(cfg))
+    out = run(fixture_workbook, str(cfg_path), str(tmp_path))
+    lv = out["results"]["levers"]
+    assert "levers" in lv and "porDriver" in lv
+    assert "totalImpacto" not in lv          # never a grand total
