@@ -45,3 +45,50 @@ def monotributo_status(categoria, facturacion_anual_nominal, tables):
         "proximidad": (facturacion_anual_nominal / techo) if techo else 0.0,
         "resolucion": tables["monotributo"].get("resolucion"),
     }
+
+
+def apply_fiscal(fin, cfg, ref_dir=None):
+    """Build the fiscal block on NOMINAL pesos and attach it as fin['fiscal'].
+    Runs BEFORE restatement (AFIP works in nominal); reexpresión is applied last.
+    Tolerates a missing/blank fiscal config — records regimen=None and skips."""
+    fcfg = (cfg or {}).get("fiscal", {}) or {}
+    regimen = fcfg.get("regimen")
+    a = fin["incomeStatement"]["annual"]
+    ventas = nom(a.get("ventas", 0.0))
+    block = {"regimen": regimen}
+    warnings = []
+
+    try:
+        tables = load_fiscal_tables(ref_dir)
+        block["fuenteTablas"] = tables.get("notas", [None])[0] if isinstance(tables.get("notas"), list) else None
+        block["vigenciaHasta"] = tables.get("vigenciaHasta")
+    except Exception:
+        tables = None
+        warnings.append("Tablas fiscales no disponibles: capa fiscal omitida.")
+
+    if regimen == "responsable_inscripto":
+        cmv = ventas - nom(a.get("utilidadBruta", 0.0))                 # CMV nominal
+        compras_grav = cmv * fcfg.get("proporcionComprasGravadas", 1.0)
+        block["iva"] = iva_position(ventas, compras_grav, fcfg.get("alicuotaIVAVentas", 0.21))
+        block["iva"]["nota"] = "Posición IVA: flujo fiscal (no integra el Resultado)."
+        block["iva"]["fuenteCredito"] = ("crédito estimado como proporción de compras gravadas "
+                                         "sobre el CMV; ajustar con el IVA crédito real del workbook.")
+        resultado_antes = nom(a.get("utilidadOperativa")) if a.get("utilidadOperativa") else nom(a.get("utilidadNeta", 0.0))
+        bridge = ri_bridge(resultado_antes, ventas, compras_grav, fcfg)
+        block["bridge"] = bridge
+        a["resultadoDespuesImpuestos"] = derived(bridge["resultadoDespues"], transforms=["taxed"])
+    elif regimen == "monotributo":
+        if tables is None:
+            warnings.append("Monotributo: sin tablas fiscales, no se evaluó la categoría.")
+        else:
+            fact_anual = fin.get("annualizedVentas") or ventas
+            block["monotributo"] = monotributo_status(
+                fcfg.get("categoriaMonotributo"), fact_anual, tables)
+    elif regimen:
+        warnings.append(f"Régimen fiscal '{regimen}' no reconocido; capa fiscal omitida.")
+    # regimen None -> no tax modeling, block records that plainly
+
+    fin["fiscal"] = block
+    if warnings:
+        fin["warnings"] = list(dict.fromkeys([*fin.get("warnings", []), *warnings]))
+    return fin

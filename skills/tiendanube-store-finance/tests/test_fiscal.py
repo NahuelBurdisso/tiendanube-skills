@@ -35,3 +35,18 @@ def test_monotributo_proximity_uses_nominal():
 def test_monotributo_over_max_hard_errors():
     with pytest.raises(ValueError):
         fiscal.monotributo_status(categoria="K", facturacion_anual_nominal=31000000, tables=TABLES)
+
+
+def test_apply_fiscal_adds_block_on_nominal(sample_financials_v2):
+    cfg = {"fiscal": {"regimen": "monotributo", "categoriaMonotributo": "H"}}
+    fin = fiscal.apply_fiscal(sample_financials_v2, cfg)
+    assert fin["fiscal"]["regimen"] == "monotributo"
+    assert "cuotaMensualTotal" in fin["fiscal"]["monotributo"]
+    # fiscal runs on NOMINAL: no income-statement measure may carry 'restated' yet
+    for series in fin["incomeStatement"]["monthly"].values():
+        assert all("restated" not in m["transforms"] for m in series)
+
+
+def test_apply_fiscal_tolerates_missing_config(sample_financials_v2):
+    fin = fiscal.apply_fiscal(sample_financials_v2, {})   # no fiscal block
+    assert fin["fiscal"]["regimen"] is None               # records plainly, no crash

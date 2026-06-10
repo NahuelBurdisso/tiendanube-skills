@@ -20,3 +20,13 @@ def test_pipeline_fills_real(fixture_workbook, tmp_path):
     fin = json.loads(pathlib.Path(out["financials"]).read_text())
     assert fin["baseMonth"] is not None                       # reexpresión ran
     assert fin["incomeStatement"]["monthly"]["ventas"][0]["real"] is not None
+
+
+def test_pipeline_order_fiscal_then_restate(fixture_workbook, tmp_path):
+    cfg = {"brand": {"name": "ACME"}, "finance": {},
+           "fiscal": {"regimen": "monotributo", "categoriaMonotributo": "A"}}
+    cfg_path = tmp_path / "report.config.json"; cfg_path.write_text(json.dumps(cfg))
+    out = run(fixture_workbook, str(cfg_path), str(tmp_path))
+    fin = json.loads(pathlib.Path(out["financials"]).read_text())
+    assert "fiscal" in fin and fin["fiscal"]["regimen"] == "monotributo"   # fiscal applied
+    assert fin["baseMonth"] is not None                                    # restate ran after

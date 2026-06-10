@@ -4,6 +4,7 @@ Statements are READ from the workbook and reconciled; analyses augment them."""
 import json, pathlib, argparse
 from workbook import parse_workbook
 from financials import build_financials
+from fiscal import apply_fiscal
 from restatement import restate
 from adapters import to_forecast_input, to_ratios_input, to_variance_input
 from run_scripts import run_script
@@ -18,7 +19,8 @@ def run(workbook_path, config_path, out_dir):
 
     fin = build_financials(parse_workbook(workbook_path),
                            store_name=cfg.get("brand", {}).get("name"))
-    fin = restate(fin, fin_cfg)   # reexpresión a moneda de cierre (after fiscal, once Plan 3 lands)
+    fin = apply_fiscal(fin, cfg)  # taxes on NOMINAL (AFIP basis)
+    fin = restate(fin, fin_cfg)   # reexpresión a moneda de cierre — ALWAYS last
     fin_path = out_dir / "financials.json"; fin_path.write_text(json.dumps(fin, indent=1))
 
     results = {}
