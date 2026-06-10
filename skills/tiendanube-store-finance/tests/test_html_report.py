@@ -70,3 +70,12 @@ def test_report_has_new_sections_and_marks(fixture_workbook):
     assert "Impactos no aditivos" in html                  # levers non-additive
     assert ("CMV" in html) or ("Costo de la mercadería vendida" in html)
     assert "'nominal'" not in html and "{'nominal" not in html   # no measure dict leaks
+
+
+def test_report_break_even_nd_without_facturacion(fixture_workbook):
+    # The fixture's PUNTO DE EQUILIBRIO has no "facturación necesaria" -> margenSeguridad None.
+    # The report must show n/d, never a fabricated cushion (would contradict the silent lever).
+    fin = build_financials(parse_workbook(fixture_workbook))
+    assert fin["breakEven"]["margenSeguridad"] is None
+    html = build_html(fin, {"ratios": {}, "forecast": {}, "variance": {}}, {"brand": {"name": "A"}})
+    assert "Sin dato de equilibrio" in html

@@ -108,9 +108,22 @@ def build_html(fin, results, cfg):
     mn = a.get("margenNeto", 0.0)
     scale = (12.0 / active) if active else 1.0
     fixed_ann = (cf + amort) * scale                 # fixed pool incl. amortización
-    be_ventas = (fixed_ann / mb) if mb else 0.0       # break-even anualizado
-    seg = ((ann_ventas - be_ventas) / ann_ventas) if ann_ventas else 0.0
-    seg_pesos = ann_ventas - be_ventas
+    # Break-even / margen de seguridad come from the MODEL (financials.py reads the workbook's
+    # "Facturación necesaria" and only sets margenSeguridad when it exists — never a fake 100%).
+    # If absent, render n/d rather than recompute an unreconciled figure (would contradict the
+    # silent colchón lever and the model's margenSeguridad=None).
+    be_model = fin.get("breakEven", {}) or {}
+    ms_model = be_model.get("margenSeguridad")
+    if ms_model is not None:
+        seg_known = True
+        seg = ms_model
+        be_ventas = be_model.get("facturacionEquilibrioAnual") or 0.0
+        seg_pesos = V - be_ventas
+    else:
+        seg_known = False
+        seg = 0.0
+        be_ventas = 0.0
+        seg_pesos = 0.0
 
     am = months[:active]
     v_ser = [nom(x) for x in m.get("ventas", [])[:active]]
@@ -204,9 +217,9 @@ def build_html(fin, results, cfg):
     if has_cash and cash_trough < 0:
         ins.append(f"Ganar no es lo mismo que tener caja: la <b>caja acumulada tocó {M(cash_trough)}</b> en "
                    f"{trough_month} antes de recuperar a {M(cash_end)} — vigilar el calce entre cobranzas y pagos.")
-    if be_ventas:
-        ins.append(f"<b>Punto de equilibrio anualizado: {M(be_ventas)}</b>. Con el ritmo actual hay un "
-                   f"<b>colchón de {M(seg_pesos)} ({P(seg)})</b> antes de entrar en pérdida.")
+    if seg_known and be_ventas:
+        ins.append(f"<b>Punto de equilibrio del período: {M(be_ventas)}</b> (facturación necesaria del "
+                   f"workbook). Hay un <b>colchón de {M(seg_pesos)} ({P(seg)})</b> antes de entrar en pérdida.")
     if trend:
         dirn = "alcista" if trend.get("direction") == "upward" else "bajista"
         r2 = str(round(trend.get("r_squared", 0), 2)).replace(".", ",")
@@ -220,7 +233,7 @@ def build_html(fin, results, cfg):
     recs.append(("Atacar el costo de comisiones",
                  f"Las comisiones son {P(com/V if V else 0)} de las ventas. Bajarlas 3 puntos suma "
                  f"~<b>{M(0.03*ann_ventas)}/año</b> directo a la utilidad."))
-    if seg_pesos > 0:
+    if seg_known and seg_pesos > 0:
         recs.append(("Cuidar el margen de seguridad",
                      f"Las ventas pueden caer hasta <b>{M(seg_pesos)}</b> antes de entrar en pérdida. Es el colchón a defender si la demanda se enfría."))
     if cash_trough < 0:
@@ -384,6 +397,25 @@ def build_html(fin, results, cfg):
     # provenance legend over the annual measures actually shown
     prov_legend = legend([a[k] for k in a if isinstance(a.get(k), dict)])
 
+    # ===== Punto de equilibrio body (from the model; n/d when the workbook lacks it) =====
+    if seg_known:
+        equilibrio_body = f"""<div class="grid2">
+    <div><div class="bignum">{M(be_ventas)}</div><p class="note">Punto de equilibrio del período
+    (facturación necesaria informada en el workbook).</p></div>
+    <div><div class="bignum">{P(seg)}</div><p class="note">Margen de seguridad: las ventas pueden caer
+    {M(seg_pesos)} antes de entrar en pérdida.</p></div>
+  </div>
+  <div class="callout"><h4>Cómo leerlo</h4>
+    <p class="note">El workbook informa una facturación necesaria de <b>{M(be_ventas)}</b> para el período;
+    contra ventas de <b>{M(V)}</b>, el negocio opera {'por encima' if V>=be_ventas else 'por debajo'} del
+    equilibrio, con un margen de seguridad de <b>{P(seg)}</b>.</p></div>"""
+    else:
+        equilibrio_body = ('<div class="callout warm"><h4>Sin dato de equilibrio</h4>'
+                           '<p class="note">El workbook no informa la "facturación necesaria" (punto de '
+                           'equilibrio), por lo que el margen de seguridad no puede calcularse de forma '
+                           'conciliable. Completar esa fila en la hoja PUNTO DE EQUILIBRIO del workbook '
+                           'para habilitar este análisis.</p></div>')
+
     head_period = f"{active} meses de {year} (YTD)"
     css = _CSS.replace("__ACCENT__", accent).replace("__WARM__", warm)
     prepared_html = (f'<div><span class="label">Para</span>'
@@ -485,15 +517,7 @@ def build_html(fin, results, cfg):
   <p class="lede">El punto de equilibrio es la facturación a la que el margen de contribución (el {P(mb)} que deja
   cada venta) cubre exactamente los costos fijos y la amortización. Asume que costo de mercadería y comisiones
   varían con la venta, y que la estructura se mantiene.</p>
-  <div class="grid2">
-    <div><div class="bignum">{M(be_ventas)}</div><p class="note">Punto de equilibrio anualizado, a un margen de contribución de {P(mb)}.</p></div>
-    <div><div class="bignum">{P(seg)}</div><p class="note">Margen de seguridad: las ventas pueden caer {M(seg_pesos)} antes de entrar en pérdida.</p></div>
-  </div>
-  <div class="callout"><h4>Cómo leerlo</h4>
-    <p class="note">Con costos fijos + amortización anualizados de <b>{M(fixed_ann)}</b> y un margen de
-    contribución de <b>{P(mb)}</b>, el negocio necesita facturar <b>{M(be_ventas)}/año</b> para cubrir su
-    estructura. Hoy factura a un ritmo de <b>{M(ann_ventas)}/año</b>,
-    {'por encima' if ann_ventas>=be_ventas else 'por debajo'} del equilibrio.</p></div>
+  {equilibrio_body}
 </div>
 
 {fiscal_section}

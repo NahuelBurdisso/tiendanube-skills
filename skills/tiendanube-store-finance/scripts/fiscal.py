@@ -5,7 +5,7 @@ Ganancias ESTIMACIÓN (alícuota efectiva — not a liquidación). Monotributo: 
 from categoría; nominal techo proximity. Restatement runs AFTER this, always.
 """
 import json, pathlib
-from measures import nom, derived
+from measures import nom
 
 def load_fiscal_tables(ref_dir=None):
     ref_dir = pathlib.Path(ref_dir) if ref_dir else pathlib.Path(__file__).parent.parent / "reference"
@@ -27,10 +27,10 @@ def ri_bridge(resultado_antes, ventas, compras_gravadas, cfg):
         "resultadoDespues": resultado_antes - iibb - ganancias,
     }
 
-def monotributo_status(categoria, facturacion_anual_nominal, tables):
+def monotributo_status(categoria, facturacion_anual_nominal, tables, raise_on_exclusion=True):
     cats = tables["monotributo"]["categorias"]
     techo_max = max(c["techoFacturacionAnual"] for c in cats.values())
-    if facturacion_anual_nominal > techo_max:
+    if raise_on_exclusion and facturacion_anual_nominal > techo_max:
         raise ValueError(
             f"Facturación anual nominal {facturacion_anual_nominal:,.0f} supera el techo máximo "
             f"de Monotributo ({techo_max:,.0f}): el contribuyente quedaría EXCLUIDO. "
@@ -76,14 +76,26 @@ def apply_fiscal(fin, cfg, ref_dir=None):
         resultado_antes = nom(a.get("utilidadOperativa")) if a.get("utilidadOperativa") else nom(a.get("utilidadNeta", 0.0))
         bridge = ri_bridge(resultado_antes, ventas, compras_grav, fcfg)
         block["bridge"] = bridge
-        a["resultadoDespuesImpuestos"] = derived(bridge["resultadoDespues"], transforms=["taxed"])
     elif regimen == "monotributo":
         if tables is None:
             warnings.append("Monotributo: sin tablas fiscales, no se evaluó la categoría.")
         else:
+            # EXCLUSIÓN (hard error) sobre facturación ACUMULADA REAL (base AFIP), no sobre el
+            # run-rate anualizado — un trimestre fuerte no debe "excluir" por extrapolación.
+            techo_max = max(c["techoFacturacionAnual"]
+                            for c in tables["monotributo"]["categorias"].values())
+            if ventas > techo_max:
+                raise ValueError(
+                    f"Facturación acumulada {ventas:,.0f} supera el techo máximo de Monotributo "
+                    f"({techo_max:,.0f}): el contribuyente quedaría EXCLUIDO. "
+                    f"Configurar régimen 'responsable_inscripto'.")
+            # Proximidad/cuota sobre facturación anualizada (run-rate, prospectivo).
             fact_anual = fin.get("annualizedVentas") or ventas
             block["monotributo"] = monotributo_status(
-                fcfg.get("categoriaMonotributo"), fact_anual, tables)
+                fcfg.get("categoriaMonotributo"), fact_anual, tables, raise_on_exclusion=False)
+            block["monotributo"]["notaBase"] = (
+                "Proximidad sobre facturación anualizada (run-rate); "
+                "exclusión evaluada sobre facturación acumulada real.")
     elif regimen:
         warnings.append(f"Régimen fiscal '{regimen}' no reconocido; capa fiscal omitida.")
     # regimen None -> no tax modeling, block records that plainly

@@ -50,3 +50,24 @@ def test_apply_fiscal_adds_block_on_nominal(sample_financials_v2):
 def test_apply_fiscal_tolerates_missing_config(sample_financials_v2):
     fin = fiscal.apply_fiscal(sample_financials_v2, {})   # no fiscal block
     assert fin["fiscal"]["regimen"] is None               # records plainly, no crash
+
+
+def test_monotributo_partial_year_no_false_exclusion():
+    # Actual accumulated facturación is below the max techo, but the run-rate annualized
+    # figure is above it. Must NOT hard-error (a strong quarter isn't an exclusion); the
+    # run-rate over the techo surfaces as proximidad > 1 (a lever signal), not a crash.
+    from financials import build_financials
+    tmax = max(c["techoFacturacionAnual"]
+               for c in fiscal.load_fiscal_tables()["monotributo"]["categorias"].values())
+    monthly = tmax * 0.15                       # 2 months -> actual 0.30*tmax, annualized 1.8*tmax
+    keys = ["ventas","costoReposicion","comisiones","utilidadBruta","costosFijos",
+            "amortizacion","utilidadOperativa","gastosVariables","utilidadNeta"]
+    mp = {k: [0, 0] for k in keys}; mp["ventas"] = [monthly, monthly]
+    parsed = {"months": ["Enero","Febrero"], "year": 2025,
+              "incomeStatement": {"monthly": mp},
+              "cashFlow": {"monthly": {"ingresos":[0,0],"egresos":[0,0],"total":[0,0]}},
+              "breakEven": {"margenBrutoMonthly": [], "facturacionEquilibrioMonthly": []},
+              "warnings": []}
+    fin = build_financials(parsed)
+    fin = fiscal.apply_fiscal(fin, {"fiscal": {"regimen": "monotributo", "categoriaMonotributo": "K"}})
+    assert fin["fiscal"]["monotributo"]["proximidad"] > 1   # run-rate over techo, no exclusion raised
