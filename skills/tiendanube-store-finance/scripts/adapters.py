@@ -1,5 +1,6 @@
 """Map canonical financials -> each vendored script's required input JSON.
 financial-analyst AUGMENTS the read statements; it never recomputes them."""
+from measures import nom
 
 def _avg_growth(series):
     rates = []
@@ -13,10 +14,11 @@ def to_forecast_input(fin, cfg):
     m = fin["incomeStatement"]["monthly"]
     a = fin["incomeStatement"]["annual"]
     active = fin.get("activeMonths") or len(m["ventas"])
-    ventas = m["ventas"][:active]
+    ventas = [nom(v) for v in m["ventas"][:active]]
     # everything below gross profit: fixed + amortization + variable expenses
-    opex = (a.get("gastosVariables", 0.0) + a.get("costosFijos", 0.0) + a.get("amortizacion", 0.0))
-    opex_pct = (opex / a["ventas"]) if a.get("ventas") else 0.0
+    opex = (nom(a.get("gastosVariables", 0.0)) + nom(a.get("costosFijos", 0.0)) + nom(a.get("amortizacion", 0.0)))
+    a_ventas = nom(a.get("ventas", 0.0))
+    opex_pct = (opex / a_ventas) if a_ventas else 0.0
     fin_cfg = cfg.get("finance", cfg)  # tolerate flat or nested config
     # weekly cash-flow inputs must reflect the RUN-RATE, not the YTD total: annualize
     # YTD figures by active months so a partial year doesn't understate the projection.
@@ -32,9 +34,9 @@ def to_forecast_input(fin, cfg):
         },
         "cash_flow_inputs": {
             "opening_balance": fin_cfg.get("cashBalance", 0),
-            "weekly_revenue": _weekly(a.get("ventas", 0.0)),
+            "weekly_revenue": _weekly(a_ventas),
             "collection_rate": fin_cfg.get("collectionRate", 1.0),
-            "payroll": fin_cfg.get("payrollWeekly", _weekly(a.get("costosFijos", 0.0))),
+            "payroll": fin_cfg.get("payrollWeekly", _weekly(nom(a.get("costosFijos", 0.0)))),
             "rent": fin_cfg.get("rentWeekly", 0),
             "operating_expenses": _weekly(opex),
         },
@@ -54,16 +56,17 @@ def to_ratios_input(fin):
     totals = fin["cashFlow"]["monthly"].get("total", []) or [0]
     active = fin.get("activeMonths") or len(totals)
     cash = sum(totals[:active])            # net operating cash generated in the period
-    op_income = a.get("utilidadOperativa", 0.0)
+    op_income = nom(a.get("utilidadOperativa", 0.0))
+    a_ventas = nom(a.get("ventas", 0.0))
     return {
         "income_statement": {
-            "revenue": a.get("ventas", 0.0),
+            "revenue": a_ventas,
             # effective COGS = revenue - gross profit (includes Comisiones), so the
             # ratio's gross margin reconciles to the statement's margenBruto
-            "cost_of_goods_sold": a.get("ventas", 0.0) - a.get("utilidadBruta", 0.0),
+            "cost_of_goods_sold": a_ventas - nom(a.get("utilidadBruta", 0.0)),
             "operating_income": op_income,
-            "net_income": a.get("utilidadNeta", 0.0),
-            "ebitda": op_income + a.get("amortizacion", 0.0),
+            "net_income": nom(a.get("utilidadNeta", 0.0)),
+            "ebitda": op_income + nom(a.get("amortizacion", 0.0)),
         },
         "balance_sheet": {
             "inventory": inv,
@@ -94,8 +97,8 @@ def to_variance_input(fin, company=None):
             items.append({
                 "name": name,
                 "type": _VAR_TYPES.get(key, "expense"),
-                "actual": series[-1],
-                "prior_year": series[-2],  # prior MONTH (period-over-period; the template has no budget)
+                "actual": nom(series[-1]),
+                "prior_year": nom(series[-2]),  # prior MONTH (period-over-period; the template has no budget)
             })
     return {"company": company or fin.get("storeName") or "Cliente",
             "period": (fin["months"][-1] if fin["months"] else "Actual"),

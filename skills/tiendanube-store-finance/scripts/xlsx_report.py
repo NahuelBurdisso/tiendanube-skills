@@ -3,6 +3,7 @@ client's workbook (we reproduce the read values, never recomputed)."""
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from measures import nom
 
 # ---------------------------------------------------------------------------
 # Style constants
@@ -91,13 +92,13 @@ def _build_resumen(wb, fin, results):
     months_list   = fin.get("months", [])
     active        = fin.get("activeMonths") or 1
     annual        = fin["incomeStatement"]["annual"]
-    ventas_ytd    = annual.get("ventas", 0.0)
+    ventas_ytd    = nom(annual.get("ventas", 0.0))
     annualized    = fin.get("annualizedVentas", 0.0)
     margen_bruto  = annual.get("margenBruto", 0.0)
     margen_neto   = annual.get("margenNeto", 0.0)
-    utilidad_op   = annual.get("utilidadOperativa", 0.0)
-    util_bruta    = annual.get("utilidadBruta", 0.0)
-    util_neta     = annual.get("utilidadNeta", 0.0)
+    utilidad_op   = nom(annual.get("utilidadOperativa", 0.0))
+    util_bruta    = nom(annual.get("utilidadBruta", 0.0))
+    util_neta     = nom(annual.get("utilidadNeta", 0.0))
     margen_op     = (utilidad_op / ventas_ytd) if ventas_ytd else 0.0
     store_name    = fin.get("storeName") or "Tienda"
     year          = fin.get("year") or ""
@@ -171,7 +172,7 @@ def _build_estado(wb, fin):
     active      = fin.get("activeMonths") or len(months)
     m_data      = fin["incomeStatement"]["monthly"]
     annual      = fin["incomeStatement"]["annual"]
-    ventas_ytd  = annual.get("ventas", 0.0)
+    ventas_ytd  = nom(annual.get("ventas", 0.0))
 
     # Header row: Concepto + month names (mark active with " *") + YTD + Anual est.
     n_months = len(months)
@@ -193,7 +194,7 @@ def _build_estado(wb, fin):
 
     for key, label in _IS_ROWS:
         monthly_vals = m_data.get(key, [0.0] * n_months)
-        ann_val      = annual.get(key, 0.0)
+        ann_val      = nom(annual.get(key, 0.0))
         annualized   = ann_val * (12.0 / active) if active else ann_val
 
         is_subtotal = label in _SUBTOTAL_LABELS
@@ -203,7 +204,7 @@ def _build_estado(wb, fin):
 
         put(ws, row, 1, label, font=font, fill=fill)
         for ci, val in enumerate(monthly_vals, 2):
-            v = val if val is not None else 0.0
+            v = nom(val) if val is not None else 0.0
             cell = put(ws, row, ci, v, fmt=MONEY, fill=fill)
             if v < 0:
                 cell.font = NEG_FONT
@@ -221,7 +222,7 @@ def _build_estado(wb, fin):
     _section_row(ws, row, "MÁRGENES"); row += 1
     margins = [
         ("Margen bruto",     annual.get("margenBruto", 0.0)),
-        ("Margen operativo", (annual.get("utilidadOperativa", 0.0) / ventas_ytd) if ventas_ytd else 0.0),
+        ("Margen operativo", (nom(annual.get("utilidadOperativa", 0.0)) / ventas_ytd) if ventas_ytd else 0.0),
         ("Margen neto",      annual.get("margenNeto", 0.0)),
     ]
     for label, val in margins:

@@ -3,6 +3,7 @@ Reads the workbook's statements (reconciled) and layers cash, profitability, bre
 forecast/scenarios, variance and computed recommendations. build_html(fin, results, cfg)."""
 import html as _html
 import charts as ch
+from measures import nom
 
 _CSS = """
 :root{--bg:#F4EFE6;--surface:#FBF8F2;--deep:#EAE2D4;--text:#2A211A;--ink:#1A1512;
@@ -92,15 +93,15 @@ def build_html(fin, results, cfg):
         return f"{x*100:.1f}%".replace(".", ",")
 
     # ---- statement figures (all read, never recomputed) ----
-    V = a.get("ventas", 0.0)
-    cr = a.get("costoReposicion", 0.0)
-    com = a.get("comisiones", 0.0)
-    ub = a.get("utilidadBruta", 0.0)
-    cf = a.get("costosFijos", 0.0)
-    amort = a.get("amortizacion", 0.0)
-    uo = a.get("utilidadOperativa", 0.0)
-    gv = a.get("gastosVariables", 0.0)
-    un = a.get("utilidadNeta", 0.0)
+    V = nom(a.get("ventas", 0.0))
+    cr = nom(a.get("costoReposicion", 0.0))
+    com = nom(a.get("comisiones", 0.0))
+    ub = nom(a.get("utilidadBruta", 0.0))
+    cf = nom(a.get("costosFijos", 0.0))
+    amort = nom(a.get("amortizacion", 0.0))
+    uo = nom(a.get("utilidadOperativa", 0.0))
+    gv = nom(a.get("gastosVariables", 0.0))
+    un = nom(a.get("utilidadNeta", 0.0))
     mb = a.get("margenBruto", 0.0)
     mo = (uo / V) if V else 0.0
     mn = a.get("margenNeto", 0.0)
@@ -111,10 +112,10 @@ def build_html(fin, results, cfg):
     seg_pesos = ann_ventas - be_ventas
 
     am = months[:active]
-    v_ser = m.get("ventas", [])[:active]
-    ub_ser = m.get("utilidadBruta", [])[:active]
-    uo_ser = m.get("utilidadOperativa", [])[:active]
-    un_ser = m.get("utilidadNeta", [])[:active]
+    v_ser = [nom(x) for x in m.get("ventas", [])[:active]]
+    ub_ser = [nom(x) for x in m.get("utilidadBruta", [])[:active]]
+    uo_ser = [nom(x) for x in m.get("utilidadOperativa", [])[:active]]
+    un_ser = [nom(x) for x in m.get("utilidadNeta", [])[:active]]
     gm_ser = [(ub_ser[i] / v_ser[i]) if i < len(v_ser) and v_ser[i] else 0 for i in range(len(am))]
     om_ser = [(uo_ser[i] / v_ser[i]) if i < len(v_ser) and v_ser[i] else 0 for i in range(len(am))]
     nm_ser = [(un_ser[i] / v_ser[i]) if i < len(v_ser) and v_ser[i] else 0 for i in range(len(am))]
@@ -249,10 +250,11 @@ def build_html(fin, results, cfg):
     head_m = "".join(f"<th class='r'>{mo}</th>" for mo in am)
     is_rows = ""
     for key, label, kind in is_rows_def:
-        cells = "".join(f"<td class='r'>{M(x)}</td>" for x in m.get(key, [])[:active])
+        cells = "".join(f"<td class='r'>{M(nom(x))}</td>" for x in m.get(key, [])[:active])
         cls = " class='sub'" if kind == "sub" else (" class='tot'" if kind == "tot" else "")
-        is_rows += (f"<tr{cls}><td>{label}</td>{cells}<td class='r'><b>{M(a.get(key,0))}</b></td>"
-                    f"<td class='r'>{M(a.get(key,0)*scale)}</td></tr>")
+        ann_val = nom(a.get(key, 0))
+        is_rows += (f"<tr{cls}><td>{label}</td>{cells}<td class='r'><b>{M(ann_val)}</b></td>"
+                    f"<td class='r'>{M(ann_val*scale)}</td></tr>")
 
     def kicker(num, lab):
         return f'<div class="kicker"><span class="num">{num}</span><span class="label">{lab}</span></div>'

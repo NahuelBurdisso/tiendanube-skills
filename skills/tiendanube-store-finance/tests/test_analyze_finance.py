@@ -9,5 +9,5 @@ def test_run_produces_all_artifacts(fixture_workbook, tmp_path):
     assert pathlib.Path(out["xlsx"]).exists()
     assert pathlib.Path(out["html"]).exists()
     fin = json.loads(pathlib.Path(out["financials"]).read_text())
-    assert fin["schemaVersion"] == "1.0"
+    assert fin["schemaVersion"] == "2.0"
     assert "ratios" in out["results"]

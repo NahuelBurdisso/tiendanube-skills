@@ -46,3 +46,13 @@ def fixture_workbook(tmp_path):
     p = tmp_path / "client.xlsx"
     wb.save(p)
     return str(p)
+
+@pytest.fixture
+def sample_parsed(fixture_workbook):
+    from workbook import parse_workbook
+    return parse_workbook(fixture_workbook)
+
+@pytest.fixture
+def sample_financials_v2(sample_parsed):
+    from financials import build_financials
+    return build_financials(sample_parsed)
