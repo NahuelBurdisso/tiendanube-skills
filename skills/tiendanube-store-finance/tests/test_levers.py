@@ -34,3 +34,38 @@ def test_engine_ranks_groups_and_never_totals():
 def test_null_metric_rule_is_skipped():
     rules = [lambda m, c: None]
     assert levers.build_levers({}, {}, rules=rules)["levers"] == []
+
+
+# ---------------------------------------------------------------------------
+# Task 2 — real-terms margin & real-decline rules
+# ---------------------------------------------------------------------------
+
+from measures import measure, fact
+
+
+def _model_margins(real_series):
+    ventas = [measure(v*3, real=v*3) for v in [100, 100, 100]]
+    ub = [measure(0, real=r) for r in real_series]
+    return {"incomeStatement": {"monthly": {"ventas": ventas, "utilidadBruta": ub},
+                                "annual": {"ventas": measure(900, real=900), "margenBruto": 0.30}},
+            "baseMonth": "2026-03"}
+
+
+def test_margin_erosion_fires_in_real_terms():
+    m = _model_margins([90, 80, 70])
+    lev = levers.rule_margen_erosionado(m, {"finance": {"umbrales": {}}})
+    assert lev is not None and lev["driver"] == "margen"
+    assert lev["impacto"]["real"] > 0
+    assert "real" in lev["supuesto"].lower() or "moneda" in lev["supuesto"].lower()
+
+
+def test_margin_stable_does_not_fire():
+    m = _model_margins([90, 90, 90])
+    assert levers.rule_margen_erosionado(m, {"finance": {"umbrales": {}}}) is None
+
+
+def test_real_decline_uses_explicit_counterfactual():
+    ventas = [measure(100, real=100), measure(120, real=95)]
+    m = {"incomeStatement": {"monthly": {"ventas": ventas}, "annual": {}}, "baseMonth": "2026-02"}
+    lev = levers.rule_caida_real(m, {"finance": {}})
+    assert lev is not None and "constante" in lev["supuesto"].lower()
