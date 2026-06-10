@@ -557,6 +557,135 @@ def _build_advertencias(wb, fin):
 
 
 # ---------------------------------------------------------------------------
+# Tab — Reexpresión a moneda de cierre
+# ---------------------------------------------------------------------------
+
+def _build_reexpresion(wb, fin):
+    ws = wb.create_sheet("Reexpresión")
+    ws.sheet_properties.tabColor = "8C6B2E"
+    base = fin.get("baseMonth")
+    put(ws, 1, 1, f"Reexpresión a moneda de cierre ({base or 'n/d'}) — IPC INDEC. "
+                  f"Homogeneización del Estado de Resultados; no calcula RECPAM.",
+        font=Font(bold=True, color="6B2532"))
+    months = fin.get("months", []); active = fin.get("activeMonths") or len(months)
+    ventas = fin["incomeStatement"]["monthly"].get("ventas", [])[:active]
+    for col, h in enumerate(["Mes", "Ventas nominal", "Ventas real (cierre)"], 1):
+        put(ws, 3, col, h)
+    header(ws, 3)
+    row = 4
+    for i in range(active):
+        meas = ventas[i] if i < len(ventas) else {}
+        put(ws, row, 1, months[i] if i < len(months) else f"Mes {i+1}")
+        put(ws, row, 2, nom(meas), fmt=MONEY)
+        real = meas.get("real") if isinstance(meas, dict) else None
+        put(ws, row, 3, real if real is not None else "s/d IPC", fmt=MONEY if real is not None else None)
+        row += 1
+    av = fin["incomeStatement"]["annual"].get("ventas", {})
+    put(ws, row + 1, 1, "Anual", font=BOLD_FONT)
+    put(ws, row + 1, 2, nom(av), fmt=MONEY, font=BOLD_FONT)
+    ar = av.get("real") if isinstance(av, dict) else None
+    put(ws, row + 1, 3, ar if ar is not None else "n/d (período incompleto en IPC)",
+        fmt=MONEY if ar is not None else None, font=BOLD_FONT)
+    for c, w in ((1, 16), (2, 20), (3, 24)):
+        _set_col_width(ws, c, w)
+    return ws
+
+
+# ---------------------------------------------------------------------------
+# Tab — Posición fiscal
+# ---------------------------------------------------------------------------
+
+def _build_fiscal(wb, fin):
+    fz = fin.get("fiscal") or {}
+    ws = wb.create_sheet("Posición fiscal")
+    ws.sheet_properties.tabColor = "3F6B4A"
+    reg = fz.get("regimen")
+    put(ws, 1, 1, f"Posición fiscal — régimen: {reg or 'no configurado'} "
+                  f"(impuestos sobre pesos nominales; Ganancias = estimación).",
+        font=Font(bold=True, color="6B2532"))
+    r = 3
+    if reg == "responsable_inscripto":
+        iva = fz.get("iva", {}); br = fz.get("bridge", {})
+        for label, val in (("IVA débito fiscal", iva.get("debito")),
+                           ("IVA crédito fiscal", iva.get("credito")),
+                           ("Posición IVA (flujo, no resultado)", iva.get("posicion")),
+                           ("Ingresos Brutos (IIBB)", br.get("iibb")),
+                           ("Impuesto a las Ganancias (estimación)", br.get("ganancias")),
+                           ("Resultado después de impuestos", br.get("resultadoDespues"))):
+            put(ws, r, 1, label); put(ws, r, 2, val or 0, fmt=MONEY); r += 1
+        put(ws, r + 1, 1, br.get("ganancias_nota", ""))
+    elif reg == "monotributo":
+        mt = fz.get("monotributo", {})
+        for label, val, fmt in (("Categoría", mt.get("categoria"), None),
+                                ("Cuota mensual total", mt.get("cuotaMensualTotal"), MONEY),
+                                ("Techo facturación anual (nominal)", mt.get("techoFacturacionAnual"), MONEY),
+                                ("Headroom (nominal)", mt.get("headroom"), MONEY),
+                                ("Proximidad al techo", mt.get("proximidad"), PCT)):
+            put(ws, r, 1, label); put(ws, r, 2, val if val is not None else "—", fmt=fmt); r += 1
+    else:
+        put(ws, r, 1, "Régimen fiscal no configurado (definir fiscal.regimen).")
+    _set_col_width(ws, 1, 38); _set_col_width(ws, 2, 20)
+    return ws
+
+
+# ---------------------------------------------------------------------------
+# Tab — Palancas / Acciones
+# ---------------------------------------------------------------------------
+
+def _build_palancas(wb, results):
+    lv = (results or {}).get("levers") or {}
+    ws = wb.create_sheet("Palancas")
+    ws.sheet_properties.tabColor = "B08858"
+    put(ws, 1, 1, "Palancas / Acciones — impactos NO aditivos (no sumar).",
+        font=Font(bold=True, color="6B2532"))
+    for col, h in enumerate(["Prioridad", "Palanca", "Acción", "Impacto/mes (real)",
+                             "Confianza", "Driver", "Supuesto"], 1):
+        put(ws, 3, col, h)
+    header(ws, 3)
+    row = 4
+    for l in lv.get("levers", []):
+        put(ws, row, 1, l.get("prioridad"))
+        put(ws, row, 2, l.get("titulo"))
+        put(ws, row, 3, l.get("accion"))
+        put(ws, row, 4, (l.get("impacto") or {}).get("real", 0), fmt=MONEY)
+        put(ws, row, 5, l.get("confianza"))
+        put(ws, row, 6, l.get("driver"))
+        put(ws, row, 7, l.get("supuesto"))
+        row += 1
+    if row == 4:
+        put(ws, 4, 1, "Sin palancas accionables: indicadores dentro de rango.")
+    put(ws, row + 1, 1, lv.get("nota", "Impactos no aditivos."))
+    for c, w in ((1, 9), (2, 28), (3, 38), (4, 18), (5, 11), (6, 12), (7, 44)):
+        _set_col_width(ws, c, w)
+    return ws
+
+
+# ---------------------------------------------------------------------------
+# Tab — Supuestos
+# ---------------------------------------------------------------------------
+
+def _build_supuestos(wb, fin):
+    ws = wb.create_sheet("Supuestos")
+    ws.sheet_properties.tabColor = "61574A"
+    fz = fin.get("fiscal") or {}
+    notas = [
+        "Estados leídos del workbook y conciliados (no recalculados).",
+        f"Reexpresión a moneda de cierre {fin.get('baseMonth') or 'n/d'} vía IPC INDEC nivel general — "
+        "homogeneización del Estado de Resultados.",
+        "RECPAM (Resultado por Exposición a la Inflación) FUERA DE ALCANCE — requiere balance completo "
+        "con partidas monetarias/no monetarias.",
+        f"Posición fiscal sobre pesos nominales (base AFIP); régimen: {fz.get('regimen') or 'no configurado'}. "
+        "Ganancias = estimación por alícuota efectiva, no liquidación.",
+        "Palancas estimadas de forma independiente: NO son aditivas.",
+    ]
+    put(ws, 1, 1, "Supuestos y notas metodológicas", font=Font(bold=True, color="6B2532", size=12))
+    for i, n in enumerate(notas, start=3):
+        put(ws, i, 1, "• " + n)
+    _set_col_width(ws, 1, 100)
+    return ws
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -569,10 +698,14 @@ def write_xlsx(fin, results, out_path):
 
     _build_resumen(wb, fin, results)
     _build_estado(wb, fin)
+    _build_reexpresion(wb, fin)
     _build_flujo(wb, fin, results)
+    _build_fiscal(wb, fin)
     _build_variacion(wb, results)
+    _build_palancas(wb, results)
     _build_ratios(wb, results)
     _build_proyeccion(wb, results)
+    _build_supuestos(wb, fin)
     _build_advertencias(wb, fin)
 
     wb.save(out_path)

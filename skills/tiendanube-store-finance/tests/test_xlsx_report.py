@@ -29,3 +29,20 @@ def test_write_xlsx_includes_warnings_sheet(fixture_workbook, tmp_path):
     assert "Advertencias" in wb.sheetnames
     rows = [r[0] for r in wb["Advertencias"].iter_rows(values_only=True)]
     assert any("#REF!" in (r or "") for r in rows)
+
+
+def test_xlsx_has_new_tabs(fixture_workbook, tmp_path):
+    from fiscal import apply_fiscal
+    from restatement import restate
+    from levers import build_levers
+    cfg = {"fiscal": {"regimen": "monotributo", "categoriaMonotributo": "A"}, "finance": {}}
+    fin = build_financials(parse_workbook(fixture_workbook))
+    fin = apply_fiscal(fin, cfg)
+    fin = restate(fin, cfg["finance"])
+    results = {"forecast": {}, "variance": {}, "ratios": {}, "levers": build_levers(fin, cfg)}
+    out = tmp_path / "f.xlsx"
+    write_xlsx(fin, results, str(out))
+    wb = openpyxl.load_workbook(out)
+    for tab in ["Estado de Resultados", "Reexpresión", "Posición fiscal",
+                "Variación", "Ratios", "Palancas", "Proyección", "Supuestos"]:
+        assert tab in wb.sheetnames, f"missing tab: {tab}"
