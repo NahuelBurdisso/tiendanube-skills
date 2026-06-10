@@ -71,3 +71,54 @@ def rule_caida_real(model, cfg):
 
 
 RULES += [rule_margen_erosionado, rule_caida_real]
+
+
+# ---------------------------------------------------------------------------
+# Task 3 rules
+# ---------------------------------------------------------------------------
+
+def rule_monotributo_limite(model, cfg):
+    f = model.get("fiscal", {})
+    mt = f.get("monotributo")
+    if not mt or f.get("regimen") != "monotributo":
+        return None
+    umbral = cfg.get("finance", {}).get("umbrales", {}).get("proximidadMonotributo", 0.85)
+    if mt.get("proximidad", 0) < umbral:
+        return None
+    head = mt["headroom"]
+    return _mk("proximidad-limite-monotributo",
+               f"Cerca del techo de la categoría {mt['categoria']}",
+               "fiscal", {"metric": "facturacionAnualNominal", "proximidad": mt["proximidad"]},
+               "Planificar recategorización o pase a Responsable Inscripto.",
+               head, "Facturación y techo en pesos NOMINALES (los topes AFIP son nominales).",
+               "alta")
+
+
+def rule_existencias_inmovilizadas(model, cfg):
+    d = model.get("drivers", {})
+    slow = d.get("slowMovingValue")
+    if not slow:
+        return None
+    rate = d.get("recoverableRate", 0.5)
+    impacto = slow * rate
+    return _mk("existencias-inmovilizadas", "Liberar capital de existencias de baja rotación",
+               "stock", {"metric": "slowMovingValue", "valor": slow},
+               "Liquidar/rotar stock lento para liberar capital de trabajo.",
+               impacto, f"Valor recuperable estimado al {rate:.0%} del costo; no garantiza venta.",
+               "baja")
+
+
+def rule_colchon_equilibrio(model, cfg):
+    be = model.get("breakEven", {}) or {}
+    ms = be.get("margenSeguridad")
+    umbral = cfg.get("finance", {}).get("umbrales", {}).get("margenSeguridad", 0.15)
+    if ms is None or ms >= umbral:
+        return None
+    falt = be.get("facturacionParaColchon", 0)
+    return _mk("colchon-equilibrio-fino", "Colchón sobre el punto de equilibrio es fino",
+               "equilibrio", {"metric": "margenSeguridad", "valor": ms, "umbral": umbral},
+               "Aumentar facturación o bajar costos fijos hasta un colchón seguro.",
+               falt, "Anclado al punto de equilibrio, no a un ratio externo.", "media")
+
+
+RULES += [rule_monotributo_limite, rule_existencias_inmovilizadas, rule_colchon_equilibrio]

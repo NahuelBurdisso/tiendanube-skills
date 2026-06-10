@@ -69,3 +69,33 @@ def test_real_decline_uses_explicit_counterfactual():
     m = {"incomeStatement": {"monthly": {"ventas": ventas}, "annual": {}}, "baseMonth": "2026-02"}
     lev = levers.rule_caida_real(m, {"finance": {}})
     assert lev is not None and "constante" in lev["supuesto"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — Monotributo (nominal), existencias, break-even rules
+# ---------------------------------------------------------------------------
+
+def test_monotributo_lever_reads_nominal_block():
+    model = {"fiscal": {"regimen": "monotributo", "monotributo": {
+        "categoria": "H", "headroom": 400000, "proximidad": 0.94, "techoFacturacionAnual": 9000000}},
+        "incomeStatement": {"monthly": {}, "annual": {}}}
+    lev = levers.rule_monotributo_limite(model, {"finance": {}})
+    assert lev is not None and lev["driver"] == "fiscal"
+    assert lev["impacto"]["nominal"] == 400000
+    assert "nominal" in lev["supuesto"].lower()
+
+
+def test_monotributo_lever_silent_when_far():
+    model = {"fiscal": {"regimen": "monotributo", "monotributo": {
+        "categoria": "A", "headroom": 8000000, "proximidad": 0.2, "techoFacturacionAnual": 9000000}},
+        "incomeStatement": {"monthly": {}, "annual": {}}}
+    assert levers.rule_monotributo_limite(model, {"finance": {}}) is None
+
+
+def test_existencias_uses_recoverable_value_low_confidence():
+    model = {"balanceSheetPartial": {"inventory": 500000},
+             "drivers": {"slowMovingValue": 200000, "recoverableRate": 0.6},
+             "incomeStatement": {"monthly": {}, "annual": {}}}
+    lev = levers.rule_existencias_inmovilizadas(model, {"finance": {}})
+    assert lev is not None and lev["confianza"] == "baja"
+    assert lev["impacto"]["real"] == 120000
