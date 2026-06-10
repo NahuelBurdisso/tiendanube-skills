@@ -319,11 +319,12 @@ def build_html(fin, results, cfg):
     <tr><td>IVA débito fiscal</td><td class="r">{M(iva.get('debito',0))}</td><td>Sobre ventas</td></tr>
     <tr><td>IVA crédito fiscal</td><td class="r">{M(iva.get('credito',0))}</td><td>Estimado s/compras gravadas</td></tr>
     <tr class="sub"><td>Posición IVA</td><td class="r">{M(iva.get('posicion',0))}</td><td>Flujo fiscal — no integra el Resultado</td></tr>
-    <tr><td>Ingresos Brutos (IIBB)</td><td class="r">{M(br.get('iibb',0))}</td><td>Gasto sobre ventas</td></tr>
-    <tr><td>Impuesto a las Ganancias</td><td class="r">{M(br.get('ganancias',0))}</td><td>Estimación por alícuota efectiva</td></tr>
-    <tr class="tot"><td>Resultado después de impuestos</td><td class="r">{M(br.get('resultadoDespues',0))}</td><td>Puente sobre resultado antes de impuestos</td></tr>
+    <tr class="sub"><td>Resultado neto (workbook)</td><td class="r">{M(br.get('resultadoAntes',0))}</td><td>Punto de partida — antes de impuesto nacional</td></tr>
+    <tr><td>Ingresos Brutos (IIBB)</td><td class="r">{M(br.get('iibb',0))}</td><td>Informativo — verificar si ya está en costos</td></tr>
+    <tr><td>(−) Impuesto a las Ganancias</td><td class="r">{M(br.get('ganancias',0))}</td><td>Estimación s/resultado neto</td></tr>
+    <tr class="tot"><td>Resultado después de Ganancias</td><td class="r">{M(br.get('resultadoDespues',0))}</td><td>Neto − Ganancias estimadas (IIBB no re-restado)</td></tr>
   </table>
-  <div class="callout warm"><h4>Alcance fiscal</h4><p class="note">{esc(br.get('ganancias_nota',''))}
+  <div class="callout warm"><h4>Alcance fiscal</h4><p class="note">{esc(br.get('ganancias_nota',''))} {esc(br.get('iibb_nota',''))}
   La posición de IVA es un flujo fiscal y no integra el Resultado. Convenio Multilateral (IIBB
   multi-jurisdicción) y la liquidación completa de Ganancias quedan fuera de alcance.</p></div>"""
     elif reg == "monotributo":
@@ -372,18 +373,28 @@ def build_html(fin, results, cfg):
   {levers_body}
 </div>"""
 
-    # ===== Ratios =====
+    # ===== Ratios — filter_ratios returns a FLAT {metric: value} dict =====
     ratios = results.get("ratios") or {}
+    _RATIO_LABELS = {
+        "gross_margin": ("Rentabilidad", "Margen bruto"), "operating_margin": ("Rentabilidad", "Margen operativo"),
+        "net_margin": ("Rentabilidad", "Margen neto"), "roe": ("Rentabilidad", "ROE"), "roa": ("Rentabilidad", "ROA"),
+        "current_ratio": ("Liquidez", "Razón corriente"), "quick_ratio": ("Liquidez", "Prueba ácida"),
+        "cash_ratio": ("Liquidez", "Razón de caja"), "inventory_turnover": ("Eficiencia", "Rotación de existencias"),
+        "asset_turnover": ("Eficiencia", "Rotación de activos"), "receivables_turnover": ("Eficiencia", "Rotación de créditos"),
+        "dso": ("Eficiencia", "Días de venta (DSO)")}
+    _PCT_KEYS = {"gross_margin", "operating_margin", "net_margin", "roe", "roa"}
+    def _ratio_fmt(k, v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return esc(str(v))
+        return f"{f*100:.1f}%".replace(".", ",") if k in _PCT_KEYS else f"{f:.2f}".replace(".", ",")
     ratio_rows = ""
-    for cat, metrics in (ratios.items() if isinstance(ratios, dict) else []):
-        if not isinstance(metrics, dict):
+    for k, v in (ratios.items() if isinstance(ratios, dict) else []):
+        if isinstance(v, dict):
             continue
-        for k, v in metrics.items():
-            try:
-                val = f"{float(v):.2f}".replace(".", ",")
-            except (TypeError, ValueError):
-                val = esc(str(v))
-            ratio_rows += f'<tr><td>{esc(str(cat))}</td><td>{esc(str(k))}</td><td class="r">{val}</td></tr>'
+        cat, lab = _RATIO_LABELS.get(k, ("—", k))
+        ratio_rows += f'<tr><td>{cat}</td><td>{esc(lab)}</td><td class="r">{_ratio_fmt(k, v)}</td></tr>'
     ratios_table = (f'<table><tr><th>Categoría</th><th>Indicador</th><th class="r">Valor</th></tr>{ratio_rows}</table>'
                     if ratio_rows else '<p class="note">Ratios no disponibles para este período.</p>')
     ratios_section = f"""<div class="page section-open">

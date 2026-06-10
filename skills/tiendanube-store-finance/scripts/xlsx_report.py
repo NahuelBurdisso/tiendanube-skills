@@ -609,11 +609,13 @@ def _build_fiscal(wb, fin):
         for label, val in (("IVA débito fiscal", iva.get("debito")),
                            ("IVA crédito fiscal", iva.get("credito")),
                            ("Posición IVA (flujo, no resultado)", iva.get("posicion")),
-                           ("Ingresos Brutos (IIBB)", br.get("iibb")),
-                           ("Impuesto a las Ganancias (estimación)", br.get("ganancias")),
-                           ("Resultado después de impuestos", br.get("resultadoDespues"))):
+                           ("Resultado neto (workbook)", br.get("resultadoAntes")),
+                           ("IIBB (informativo — ¿ya en costos?)", br.get("iibb")),
+                           ("(−) Impuesto a las Ganancias (estimación)", br.get("ganancias")),
+                           ("Resultado después de Ganancias", br.get("resultadoDespues"))):
             put(ws, r, 1, label); put(ws, r, 2, val or 0, fmt=MONEY); r += 1
         put(ws, r + 1, 1, br.get("ganancias_nota", ""))
+        put(ws, r + 2, 1, br.get("iibb_nota", ""))
     elif reg == "monotributo":
         mt = fz.get("monotributo", {})
         for label, val, fmt in (("Categoría", mt.get("categoria"), None),

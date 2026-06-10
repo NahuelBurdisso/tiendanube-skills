@@ -57,12 +57,13 @@ def test_report_has_new_sections_and_marks(fixture_workbook):
     fin = apply_fiscal(fin, cfg)
     fin = restate(fin, cfg["finance"])
     results = {"forecast": {}, "variance": {"line_items": []},
-               "ratios": {"rentabilidad": {"margen_bruto": 0.6}},
+               "ratios": {"gross_margin": 0.6, "operating_margin": 0.2, "net_margin": 0.05},
                "levers": build_levers(fin, cfg)}
     html = build_html(fin, results, cfg)
     for h in ["Estado de Resultados", "Reexpresión a moneda de cierre", "Posición fiscal",
               "Proyección", "Palancas", "Ratios", "Supuestos"]:
         assert h in html, f"missing section: {h}"
+    assert "Margen bruto" in html and "60,0%" in html      # flat ratios rendered as %
     assert "Nominal" in html and "Real" in html            # dual columns
     assert "reexpresado a moneda de cierre" in html.lower()  # provenance legend
     assert "RECPAM" in html and "fuera de alcance" in html.lower()

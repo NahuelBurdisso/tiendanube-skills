@@ -30,8 +30,11 @@ from measures import real_or_nom
 
 
 def _real_series(model, key):
+    # ONLY the active window — trailing empty months get real=0 under projected inflation
+    # and would otherwise read as a margin/volume collapse (false-positive levers).
     s = model["incomeStatement"]["monthly"].get(key, [])
-    return [m["real"] for m in s if isinstance(m, dict) and m.get("real") is not None]
+    active = model.get("activeMonths") or len(s)
+    return [m["real"] for m in s[:active] if isinstance(m, dict) and m.get("real") is not None]
 
 
 def _mk(idd, titulo, driver, disparador, accion, impacto_real, supuesto, conf):
@@ -57,6 +60,8 @@ def rule_margen_erosionado(model, cfg):
 
 def rule_caida_real(model, cfg):
     v = model["incomeStatement"]["monthly"].get("ventas", [])
+    active = model.get("activeMonths") or len(v)
+    v = v[:active]                       # ignore trailing empty months (would read as a fake decline)
     if len(v) < 2:
         return None
     nom0, nomN = v[0]["nominal"], v[-1]["nominal"]

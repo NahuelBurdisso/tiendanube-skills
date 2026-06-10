@@ -15,11 +15,13 @@ def test_ri_bridge_estimacion():
     cfg = {"regimen": "responsable_inscripto", "alicuotaIIBB": 0.035,
            "alicuotaEfectivaGanancias": 0.30, "alicuotaIVAVentas": 0.21,
            "proporcionComprasGravadas": 1.0}
-    b = fiscal.ri_bridge(resultado_antes=1000, ventas=5000, compras_gravadas=2000, cfg=cfg)
-    assert round(b["iibb"], 2) == 175.0                  # 5000*.035
-    assert round(b["ganancias"], 2) == 247.5             # (1000-175)*.30
-    assert round(b["resultadoDespues"], 2) == round(1000 - 175 - 247.5, 2)
+    b = fiscal.ri_bridge(resultado_neto=1000, ventas=5000, compras_gravadas=2000, cfg=cfg)
+    assert round(b["iibb"], 2) == 175.0                  # 5000*.035 (informativo)
+    assert round(b["ganancias"], 2) == 300.0             # 1000*.30 (sobre resultado neto)
+    assert round(b["resultadoDespues"], 2) == 700.0      # neto − Ganancias (IIBB NO re-restado)
+    assert round(b["resultadoAntes"], 2) == 1000.0
     assert b["ganancias_nota"].startswith("Estimación")
+    assert "Verificar" in b["iibb_nota"]
 
 TABLES = {"monotributo": {"resolucion": "test", "categorias": {
     "A": {"techoFacturacionAnual": 1000000, "cuotaMensualTotal": 30000},

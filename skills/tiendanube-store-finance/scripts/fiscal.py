@@ -16,15 +16,21 @@ def iva_position(ventas, compras_gravadas, alicuota):
     credito = compras_gravadas * alicuota
     return {"debito": debito, "credito": credito, "posicion": debito - credito}
 
-def ri_bridge(resultado_antes, ventas, compras_gravadas, cfg):
+def ri_bridge(resultado_neto, ventas, compras_gravadas, cfg):
+    """Post-tax bridge from the workbook's RESULTADO NETO (its pre-national-tax bottom line).
+    Ganancias is estimated on the net result and subtracted. IIBB is reported for context but
+    NOT re-subtracted by default — in a managerial workbook it is usually already inside the
+    operating costs; subtracting it again would double-count. Flagged for the contador to confirm."""
     iibb = ventas * cfg.get("alicuotaIIBB", 0.0)
-    base_gan = resultado_antes - iibb
-    ganancias = max(0.0, base_gan) * cfg.get("alicuotaEfectivaGanancias", 0.0)
+    ganancias = max(0.0, resultado_neto) * cfg.get("alicuotaEfectivaGanancias", 0.0)
     return {
+        "resultadoAntes": resultado_neto,
         "iibb": iibb,
+        "iibb_nota": ("IIBB estimado sobre ventas. Verificar si ya está incluido en los costos del "
+                      "workbook; si lo está, no restarlo de nuevo (evita doble cómputo)."),
         "ganancias": ganancias,
-        "ganancias_nota": "Estimación por alícuota efectiva — no es una liquidación de Ganancias.",
-        "resultadoDespues": resultado_antes - iibb - ganancias,
+        "ganancias_nota": "Estimación por alícuota efectiva sobre el resultado neto — no es una liquidación de Ganancias.",
+        "resultadoDespues": resultado_neto - ganancias,
     }
 
 def monotributo_status(categoria, facturacion_anual_nominal, tables, raise_on_exclusion=True):
@@ -60,7 +66,7 @@ def apply_fiscal(fin, cfg, ref_dir=None):
 
     try:
         tables = load_fiscal_tables(ref_dir)
-        block["fuenteTablas"] = tables.get("notas", [None])[0] if isinstance(tables.get("notas"), list) else None
+        block["fuenteTablas"] = "reference/tablas-fiscales-ar.json (ARCA Monotributo + IIBB)"
         block["vigenciaHasta"] = tables.get("vigenciaHasta")
     except Exception:
         tables = None
@@ -73,8 +79,10 @@ def apply_fiscal(fin, cfg, ref_dir=None):
         block["iva"]["nota"] = "Posición IVA: flujo fiscal (no integra el Resultado)."
         block["iva"]["fuenteCredito"] = ("crédito estimado como proporción de compras gravadas "
                                          "sobre el CMV; ajustar con el IVA crédito real del workbook.")
-        resultado_antes = nom(a.get("utilidadOperativa")) if a.get("utilidadOperativa") else nom(a.get("utilidadNeta", 0.0))
-        bridge = ri_bridge(resultado_antes, ventas, compras_grav, fcfg)
+        # Bridge from the workbook's RESULTADO NETO (its bottom line), not from operativa —
+        # operativa would skip gastos variables/amortización and overstate the post-tax base.
+        resultado_neto = nom(a.get("utilidadNeta", 0.0))
+        bridge = ri_bridge(resultado_neto, ventas, compras_grav, fcfg)
         block["bridge"] = bridge
     elif regimen == "monotributo":
         if tables is None:
