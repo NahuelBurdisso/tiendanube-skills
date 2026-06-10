@@ -1,0 +1,148 @@
+{
+  "lastUpdated": "2026-06-09",
+  "vigenciaHasta": "2026-07-31",
+  "notas": [
+    "Todos los valores de Monotributo son VERIFICADOS. Fuente primaria: página oficial ARCA https://www.afip.gob.ar/monotributo/categorias.asp (vigencia desde el 1/02/2026).",
+    "Los valores son idénticos para el período febrero–julio 2026; el ajuste semestral siguiente opera en agosto 2026.",
+    "El ajuste de febrero 2026 fue del 14,28% sobre las escalas de agosto 2025–enero 2026, basado en IPC acumulado del segundo semestre 2025.",
+    "Columna 'venta de cosas muebles' (bienes/comercio) — no servicios.",
+    "Las alícuotas IIBB son VERIFICADAS como valores típicos al 2026, pero pueden variar por código NAIIB, por categoría de contribuyente y por resoluciones provinciales intermedias. Verificar con ley impositiva vigente de cada provincia.",
+    "No se dispone de número de RG (Resolución General) específico en el sitio oficial al momento de la extracción."
+  ],
+  "monotributo": {
+    "fuente": "ARCA (ex-AFIP) — https://www.afip.gob.ar/monotributo/categorias.asp",
+    "fuenteSecundaria": "Ambito Financiero https://www.ambito.com/informacion-general/monotributo-escalas-topes-y-nuevos-valores-vigentes-abril-2026-n6264240",
+    "vigenciaDesde": "2026-02-01",
+    "vigenciaHasta": "2026-07-31",
+    "resolucion": "Valores vigentes desde 01/02/2026 (ajuste semestral +14,28% sobre IPC 2do semestre 2025). Número de RG no publicado en el sitio oficial al 2026-06-09.",
+    "columna": "venta de cosas muebles (bienes / comercio)",
+    "categorias": {
+      "A": {
+        "techoFacturacionAnual": 10277988.13,
+        "impuestoIntegrado": 4780.46,
+        "aporteSIPA": 15616.17,
+        "obraSocial": 21990.11,
+        "cuotaMensualTotal": 42386.74
+      },
+      "B": {
+        "techoFacturacionAnual": 15058447.71,
+        "impuestoIntegrado": 9082.88,
+        "aporteSIPA": 17177.79,
+        "obraSocial": 21990.11,
+        "cuotaMensualTotal": 48250.78
+      },
+      "C": {
+        "techoFacturacionAnual": 21113696.52,
+        "impuestoIntegrado": 14341.38,
+        "aporteSIPA": 18895.57,
+        "obraSocial": 21990.11,
+        "cuotaMensualTotal": 55227.06
+      },
+      "D": {
+        "techoFacturacionAnual": 26212853.42,
+        "impuestoIntegrado": 23742.95,
+        "aporteSIPA": 20785.13,
+        "obraSocial": 26133.18,
+        "cuotaMensualTotal": 70661.26
+      },
+      "E": {
+        "techoFacturacionAnual": 30833964.37,
+        "impuestoIntegrado": 37924.98,
+        "aporteSIPA": 22863.64,
+        "obraSocial": 31869.73,
+        "cuotaMensualTotal": 92658.35
+      },
+      "F": {
+        "techoFacturacionAnual": 38642048.36,
+        "impuestoIntegrado": 49398.08,
+        "aporteSIPA": 25150.00,
+        "obraSocial": 36650.19,
+        "cuotaMensualTotal": 111198.27
+      },
+      "G": {
+        "techoFacturacionAnual": 46211109.37,
+        "impuestoIntegrado": 61189.87,
+        "aporteSIPA": 35210.00,
+        "obraSocial": 39518.47,
+        "cuotaMensualTotal": 135918.34
+      },
+      "H": {
+        "techoFacturacionAnual": 70113407.33,
+        "impuestoIntegrado": 175283.51,
+        "aporteSIPA": 49294.00,
+        "obraSocial": 47485.89,
+        "cuotaMensualTotal": 272063.40
+      },
+      "I": {
+        "techoFacturacionAnual": 78479211.62,
+        "impuestoIntegrado": 278860.14,
+        "aporteSIPA": 69011.60,
+        "obraSocial": 58640.31,
+        "cuotaMensualTotal": 406512.05
+      },
+      "J": {
+        "techoFacturacionAnual": 89872640.30,
+        "impuestoIntegrado": 334632.18,
+        "aporteSIPA": 96616.24,
+        "obraSocial": 65810.99,
+        "cuotaMensualTotal": 497059.41
+      },
+      "K": {
+        "techoFacturacionAnual": 108357084.05,
+        "impuestoIntegrado": 390404.20,
+        "aporteSIPA": 135262.74,
+        "obraSocial": 75212.57,
+        "cuotaMensualTotal": 600879.51
+      }
+    }
+  },
+  "iibbDefaults": {
+    "fuente": "Contablix — https://contablix.ar/blog/ingresos-brutos-ventas-internet-2026 (datos al 2026-06-09). Verificar con ley impositiva provincial vigente.",
+    "descripcion": "Alícuotas típicas de Ingresos Brutos para comercio minorista / e-commerce por provincia. ADVERTENCIA: las alícuotas dependen del código NAIIB específico y pueden variar por resoluciones intermedias. Valores orientativos, no sustitutos de verificación contable.",
+    "actividad": "comercio minorista / venta por internet",
+    "provincias": {
+      "buenos_aires": {
+        "nombre": "Provincia de Buenos Aires",
+        "organismo": "ARBA",
+        "alicuota": 0.035,
+        "notas": "3,50% para comercio minorista inscripto. Fuente: ARBA / Contablix 2026."
+      },
+      "caba": {
+        "nombre": "Ciudad Autónoma de Buenos Aires",
+        "organismo": "AGIP",
+        "alicuota": 0.030,
+        "notas": "3,00% para contribuyentes con ingresos brutos anuales ≤ $2.004.000.000. Ley Impositiva CABA 2026 / régimen especial e-commerce."
+      },
+      "cordoba": {
+        "nombre": "Córdoba",
+        "organismo": "DGR",
+        "alicuota": 0.035,
+        "notas": "3,50% para comercio minorista. Retención vía plataformas. Fuente: Contablix 2026."
+      },
+      "santa_fe": {
+        "nombre": "Santa Fe",
+        "organismo": "API Santa Fe",
+        "alicuota": 0.035,
+        "notas": "3,50% típico para comercio minorista. Fuente: Contablix 2026."
+      },
+      "mendoza": {
+        "nombre": "Mendoza",
+        "organismo": "ATM",
+        "alicuota": 0.035,
+        "notas": "3,50% típico para comercio minorista. Fuente: Contablix 2026."
+      },
+      "tucuman": {
+        "nombre": "Tucumán",
+        "organismo": "DGR Tucumán",
+        "alicuota": 0.030,
+        "notas": "3,00% típico para comercio minorista. Fuente: Contablix 2026."
+      },
+      "entre_rios": {
+        "nombre": "Entre Ríos",
+        "organismo": "DGR Entre Ríos",
+        "alicuota": 0.035,
+        "notas": "3,50% típico para comercio minorista. Fuente: Contablix 2026."
+      }
+    }
+  }
+}
