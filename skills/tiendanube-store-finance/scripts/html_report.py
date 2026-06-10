@@ -282,6 +282,11 @@ def build_html(fin, results, cfg):
     ventas_meas = a.get("ventas")
     real_ann = ventas_meas.get("real") if isinstance(ventas_meas, dict) else None
     real_pts = [r for r in rv_ser if r is not None]
+    # months whose real was filled with PROJECTED inflation (no actual IPC yet) — must be named
+    proj_months = [am[i] for i, x in enumerate(m.get("ventas", [])[:active])
+                   if isinstance(x, dict) and "projected" in x.get("transforms", [])]
+    proj_note = (f' Los meses <b>{", ".join(proj_months)}</b> usan inflación <b>proyectada</b>ᵖ '
+                 f'(sin IPC publicado aún), no índice real.' if proj_months else "")
     if base and real_pts:
         dual = ch.dual_bars(am, v_ser, rv_ser, accent, warm, M, h=120)
         nom_growth = (v_ser[-1] / v_ser[0] - 1) if len(v_ser) >= 2 and v_ser[0] else 0.0
@@ -299,7 +304,7 @@ def build_html(fin, results, cfg):
     <div><div class="bignum">{P(real_growth)}</div><p class="note">Crecimiento <b>real</b> (moneda de cierre). Si es
     menor que el nominal, parte de la "suba" es solo inflación.</p></div>
   </div>
-  <p class="note">Ventas anuales reexpresadas: <b>{real_ann_txt}</b> · nominal {M(V)}.</p>
+  <p class="note">Ventas anuales reexpresadas: <b>{real_ann_txt}</b> · nominal {M(V)}.{proj_note}</p>
 </div>"""
     else:
         reexp_section = f"""<div class="page section-open">
@@ -406,7 +411,11 @@ def build_html(fin, results, cfg):
 </div>"""
 
     # provenance legend over the annual measures actually shown
-    prov_legend = legend([a[k] for k in a if isinstance(a.get(k), dict)])
+    # pool annual AND active monthly measures so projected months surface ᵖ in the legend
+    _pool = [a[k] for k in a if isinstance(a.get(k), dict)]
+    for series in m.values():
+        _pool.extend(x for x in series[:active] if isinstance(x, dict))
+    prov_legend = legend(_pool)
 
     # ===== Punto de equilibrio body (from the model; n/d when the workbook lacks it) =====
     if seg_known:
