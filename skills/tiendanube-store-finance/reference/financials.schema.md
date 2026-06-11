@@ -20,7 +20,7 @@ Canonical, read-not-recomputed financials from the accounting workbook.
 - `baseMonth` string (`"YYYY-MM"`) | null — the *moneda de cierre* used for real-peso reexpresion. `null` until the restatement layer fills it in; consumers must treat money `.real` as `null` when `baseMonth` is null.
 - `months` array of month names actually present in the workbook (≤ 12)
 - `year` int | null — the analysis year selected from a multi-year workbook (latest year with data)
-- `warnings` array of strings — statement lines that had Excel error cells (e.g. `#REF!`) and were coerced to 0; the report **MUST** surface these so a misleading zero isn't shown silently.
+- `warnings` array of strings — data-quality and methodology warnings the report **MUST** surface: statement lines with Excel error cells (e.g. `#REF!`) or non-numeric text coerced to 0, months missing from the IPC series (real degraded to `null`), reexpresión unavailable (`baseMonth` null), fiscal-table vigencia exceeded, fiscal layer skipped, etc.
 
 ---
 
@@ -32,8 +32,8 @@ Every money line in `incomeStatement.monthly` and `incomeStatement.annual` is a 
 {
   "nominal": 123456.78,      // ARS at the period's own price level (never null if data exists)
   "real": 98765.43,          // ARS at baseMonth price level (null when baseMonth is null)
-  "source": "workbook",      // origin of the nominal value
-  "transforms": []           // ordered list of transforms applied: e.g. ["ipc_restatement"]
+  "source": "fact",          // origin of the nominal value: "fact" (read from workbook) | "derived"
+  "transforms": []           // ordered, deduped transform tags: "restated" | "projected"
 }
 ```
 
@@ -82,9 +82,13 @@ Summed Measure objects for the year + scalar ratio fields:
 - `margenBruto` — scalar ratio (0–1): `utilidadBruta.nominal / ventas.nominal`
 - `margenNeto` — scalar ratio (0–1): `utilidadNeta.nominal / ventas.nominal`
 
-## cashFlow (planned — Measure migration pending)
+## incomeStatement.annualFromWorkbook
 
-`cashFlow.monthly` — ingresos / egresos / total arrays. Will become Measure objects in a future plan; currently carried forward as scalars from schema 1.0 for backward compatibility. Consumers should treat them as nominal-only.
+`{lineKey: number}` | null — the workbook's **own TOTAL/Anual column**, captured when the month-header row carries a TOTAL/Anual header right after the last month (and the analyzed window spans the whole block). Used by the tie-out gate as the real reconciliation reference; `null` when the workbook has no such column.
+
+## cashFlow
+
+`cashFlow.monthly` — ingresos / egresos / total arrays of **Measure** objects, restated by the reexpresión layer like the income statement (`real` filled when IPC coverage allows).
 
 ## breakEven (planned — Measure migration pending)
 

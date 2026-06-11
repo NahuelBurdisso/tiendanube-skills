@@ -24,6 +24,31 @@ def test_tieout_fails_outside_tolerance():
     with pytest.raises(gates.GateError):
         gates.gate_tieout(_fin([100, 100, 100], 305.0))
 
+def _fin_from_total_workbook(tmp_path, total_val):
+    """Synthetic workbook whose Estado de Resultados has a TOTAL column."""
+    import openpyxl
+    from workbook import parse_workbook
+    from financials import build_financials
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Resultados"
+    ws.cell(1,1,"FLUJOS DE DINERO")
+    for i,m in enumerate(["Enero","Febrero"]): ws.cell(3,2+i,m)
+    ws.cell(4,1,"Ingresos"); ws.cell(4,2,1); ws.cell(4,3,1)
+    ws.cell(9,1,"ESTADO DE RESULTADOS")
+    for i,m in enumerate(["Enero","Febrero"]): ws.cell(11,2+i,m)
+    ws.cell(11,4,"TOTAL")
+    ws.cell(12,1,"Ventas"); ws.cell(12,2,100); ws.cell(12,3,200); ws.cell(12,4,total_val)
+    p = tmp_path/"tot.xlsx"; wb.save(str(p))
+    return build_financials(parse_workbook(str(p)))
+
+def test_tieout_against_workbook_total_passes(tmp_path):
+    fin = _fin_from_total_workbook(tmp_path, 300)
+    gates.gate_tieout(fin)                  # workbook TOTAL matches -> no raise
+
+def test_tieout_against_workbook_total_raises_on_mismatch(tmp_path):
+    fin = _fin_from_total_workbook(tmp_path, 999)   # workbook TOTAL ≠ Σ monthly
+    with pytest.raises(gates.GateError):
+        gates.gate_tieout(fin)
+
 def test_composition_rejects_double_restate():
     m = {**measures.fact(1), "transforms": ["restated", "restated"]}
     with pytest.raises(gates.GateError):

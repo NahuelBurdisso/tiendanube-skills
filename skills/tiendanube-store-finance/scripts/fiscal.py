@@ -4,7 +4,7 @@ RI: IVA débito/crédito posición (a flujo fiscal, NOT a result line), IIBB gas
 Ganancias ESTIMACIÓN (alícuota efectiva — not a liquidación). Monotributo: cuota
 from categoría; nominal techo proximity. Restatement runs AFTER this, always.
 """
-import json, pathlib
+import datetime, json, pathlib
 from measures import nom
 
 def load_fiscal_tables(ref_dir=None):
@@ -41,7 +41,10 @@ def monotributo_status(categoria, facturacion_anual_nominal, tables, raise_on_ex
             f"Facturación anual nominal {facturacion_anual_nominal:,.0f} supera el techo máximo "
             f"de Monotributo ({techo_max:,.0f}): el contribuyente quedaría EXCLUIDO. "
             f"Configurar régimen 'responsable_inscripto'.")
-    c = cats[categoria]
+    c = cats.get(categoria)
+    if c is None:
+        raise ValueError(f"categoriaMonotributo {categoria!r} inválida; "
+                         f"usar {min(cats)}..{max(cats)}.")
     techo = c["techoFacturacionAnual"]
     return {
         "categoria": categoria,
@@ -71,6 +74,19 @@ def apply_fiscal(fin, cfg, ref_dir=None):
     except Exception:
         tables = None
         warnings.append("Tablas fiscales no disponibles: capa fiscal omitida.")
+
+    # vigencia: warn when the analyzed window (or today) is past the tables' validity
+    vig = tables.get("vigenciaHasta") if tables else None
+    if vig:
+        active = fin.get("activeMonths")
+        keys = [k for k in (fin.get("monthKeys") or [])[:active or None] if k]
+        last_month = max(keys) if keys else None
+        today = datetime.date.today().isoformat()
+        if (last_month and last_month > vig[:7]) or today > vig:
+            warnings.append(
+                f"Tablas fiscales vigentes hasta {vig}: el período analizado o la fecha "
+                f"actual la exceden — refrescar Monotributo/IIBB desde ARCA/INDEC antes "
+                f"de confiar en la capa fiscal.")
 
     if regimen == "responsable_inscripto":
         cmv = ventas - nom(a.get("utilidadBruta", 0.0))                 # CMV nominal

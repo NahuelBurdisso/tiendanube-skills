@@ -63,6 +63,19 @@ def test_restate_forecast_month_uses_projected_inflation():
     assert "projected" in out[1]["transforms"]
 
 
+def test_restate_series_none_month_with_projection_does_not_raise():
+    # an unresolvable month name yields a None key; with projected_inflation set the
+    # forecast branch must NOT compare None > last_actual_month (TypeError)
+    months = ["2026-01", None, "2026-03"]
+    series = [fact(100), fact(100), fact(100)]
+    out, warnings = restatement.restate_series(series, months, IPC, base_month="2026-03",
+                                               projected_inflation=0.03,
+                                               last_actual_month="2026-01")
+    assert out[1]["real"] is None
+    assert any("sin dato" in w for w in warnings)
+    assert out[0]["real"] is not None and out[2]["real"] is not None
+
+
 def test_restate_fin_sets_basemonth_and_real(sample_financials_v2):
     from measures import real_or_nom
     fin = restatement.restate(sample_financials_v2, fin_cfg={})

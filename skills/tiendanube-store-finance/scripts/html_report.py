@@ -62,6 +62,26 @@ ul.check li:before{content:"—";position:absolute;left:0;color:var(--accent)}
 """
 
 
+def _rebound_month(values, labels):
+    """Name of the month whose positive jump dominates the period's growth (> 50% of
+    the sum of positive deltas) — the 'rebound' that inflates average growth. None
+    when growth is broad-based or there is no positive delta."""
+    deltas = [values[i] - values[i - 1] for i in range(1, len(values))]
+    pos = [d for d in deltas if d > 0]
+    if not pos:
+        return None
+    mx = max(pos)
+    if mx <= 0.5 * sum(pos):
+        return None
+    return labels[deltas.index(mx) + 1]
+
+
+def _losses_at_start(loss_idx, n):
+    """True when every loss month sits at the START of the window (so 'recién fue
+    rentable en los últimos' is accurate) and at least one later month is profitable."""
+    return bool(loss_idx) and loss_idx == list(range(len(loss_idx))) and len(loss_idx) < n
+
+
 def build_html(fin, results, cfg):
     brand = cfg.get("brand", {})
     name = brand.get("name", fin.get("storeName") or "TIENDA")
@@ -133,7 +153,8 @@ def build_html(fin, results, cfg):
     gm_ser = [(ub_ser[i] / v_ser[i]) if i < len(v_ser) and v_ser[i] else 0 for i in range(len(am))]
     om_ser = [(uo_ser[i] / v_ser[i]) if i < len(v_ser) and v_ser[i] else 0 for i in range(len(am))]
     nm_ser = [(un_ser[i] / v_ser[i]) if i < len(v_ser) and v_ser[i] else 0 for i in range(len(am))]
-    loss_months = [am[i] for i in range(len(am)) if i < len(un_ser) and un_ser[i] < 0]
+    loss_idx = [i for i in range(len(am)) if i < len(un_ser) and un_ser[i] < 0]
+    loss_months = [am[i] for i in loss_idx]
 
     # ---- cash flow (from Flujos de Dinero) ----
     cf_total = [nom(x) for x in (fin.get("cashFlow", {}).get("monthly", {}).get("total", []) or [])[:active]]
@@ -211,9 +232,11 @@ def build_html(fin, results, cfg):
     ins.append(f"Los <b>costos fijos consumen {P(cf/V if V else 0)}</b> y reducen el margen operativo a "
                f"<b>{P(mo)}</b>; tras amortizaciones y gastos variables, el <b>margen neto queda en {P(mn)}</b>.")
     if loss_months:
+        tail = (" y recién fue rentable en los últimos"
+                if _losses_at_start(loss_idx, len(am)) else "")
         ins.append(f"<b>Atención:</b> el {P(mn)} neto es un promedio del período. El negocio dio "
-                   f"<b>pérdida neta en {len(loss_months)} de {active} meses</b> ({', '.join(loss_months)}) y "
-                   f"recién fue rentable en los últimos.")
+                   f"<b>pérdida neta en {len(loss_months)} de {active} meses</b> "
+                   f"({', '.join(loss_months)}){tail}.")
     if has_cash and cash_trough < 0:
         ins.append(f"Ganar no es lo mismo que tener caja: la <b>caja acumulada tocó {M(cash_trough)}</b> en "
                    f"{trough_month} antes de recuperar a {M(cash_end)} — vigilar el calce entre cobranzas y pagos.")
@@ -224,23 +247,28 @@ def build_html(fin, results, cfg):
         dirn = "alcista" if trend.get("direction") == "upward" else "bajista"
         r2 = str(round(trend.get("r_squared", 0), 2)).replace(".", ",")
         note = (f" aunque el último mes ya mostró una baja de {P(abs(last_delta))}" if last_delta < 0 else "")
+        reb = _rebound_month(v_ser, am)
+        infl = (f" está inflado por la recuperación de {esc(reb)} y" if reb else "")
         ins.append(f"La <b>tendencia es {dirn}</b> (R²={r2}) sobre {active} meses{note}; el crecimiento promedio "
-                   f"de {P(avg_growth)}/mes está inflado por la recuperación de febrero y <b>no debe extrapolarse</b>.")
+                   f"de {P(avg_growth)}/mes{infl} <b>no debe extrapolarse</b>.")
     insights_html = "".join(f"<li>{x}</li>" for x in ins)
 
     # ---- recommendations (computed, peso-quantified) ----
     recs = []
-    recs.append(("Atacar el costo de comisiones",
-                 f"Las comisiones son {P(com/V if V else 0)} de las ventas. Bajarlas 3 puntos suma "
-                 f"~<b>{M(0.03*ann_ventas)}/año</b> directo a la utilidad."))
+    com_share = (com / V) if V else 0.0
+    if com_share > 0.03:   # only when comisiones are a meaningful share of ventas
+        recs.append(("Atacar el costo de comisiones",
+                     f"Las comisiones son {P(com_share)} de las ventas. Bajarlas 3 puntos suma "
+                     f"~<b>{M(0.03*ann_ventas)}/año</b> directo a la utilidad."))
     if seg_known and seg_pesos > 0:
         recs.append(("Cuidar el margen de seguridad",
                      f"Las ventas pueden caer hasta <b>{M(seg_pesos)}</b> antes de entrar en pérdida. Es el colchón a defender si la demanda se enfría."))
     if cash_trough < 0:
         recs.append(("Asegurar capital de trabajo",
                      f"La caja llegó a <b>{M(cash_trough)}</b>. Conviene una línea o colchón de al menos ese piso para los meses flojos."))
+    baja = " y el último a la baja" if last_delta < 0 else ""
     recs.append(("Planificar con prudencia",
-                 f"Con solo {active} meses y el último a la baja, planificar sobre el escenario <b>Conservador</b>, no el Base."))
+                 f"Con solo {active} meses{baja}, planificar sobre el escenario <b>Conservador</b>, no el Base."))
     gap = uo - un
     if uo and gap / uo > 0.2:
         recs.append(("Revisar la brecha operativa→neta",
@@ -261,7 +289,7 @@ def build_html(fin, results, cfg):
                    ("costosFijos", "(−) Costos fijos", "line"), ("amortizacion", "(−) Amortización", "line"),
                    ("utilidadOperativa", "Utilidad operativa", "sub"),
                    ("gastosVariables", "(−) Gastos variables", "line"), ("utilidadNeta", "Utilidad neta", "tot")]
-    head_m = "".join(f"<th class='r'>{mo}</th>" for mo in am)
+    head_m = "".join(f"<th class='r'>{esc(mo)}</th>" for mo in am)
     is_rows = ""
     for key, label, kind in is_rows_def:
         cells = "".join(f"<td class='r'>{M(nom(x))}</td>" for x in m.get(key, [])[:active])

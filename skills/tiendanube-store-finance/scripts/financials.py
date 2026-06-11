@@ -1,10 +1,11 @@
 """Assemble the canonical financials.json from parsed workbook blocks."""
 from measures import fact, nom
-from labels import MONTHS, normalize
+from labels import MONTHS, MONTH_ALIASES, normalize
 
 SCHEMA_VERSION = "2.0"
 
 _MONTH_NUM = {normalize(m): i + 1 for i, m in enumerate(MONTHS)}
+_MONTH_NUM.update({alias: _MONTH_NUM[canon] for alias, canon in MONTH_ALIASES.items()})
 
 def _sum(xs): return float(sum(nom(x) for x in xs)) if xs else 0.0
 
@@ -61,7 +62,8 @@ def build_financials(parsed, currency="ARS", store_name=None):
         "year": parsed.get("year"),
         "activeMonths": active,
         "annualizedVentas": annualized_ventas,
-        "incomeStatement": {"monthly": m, "annual": annual},
+        "incomeStatement": {"monthly": m, "annual": annual,
+                            "annualFromWorkbook": parsed["incomeStatement"].get("annualFromWorkbook")},
         "cashFlow": cash_flow,
         "breakEven": be,
         "balanceSheetPartial": {"inventory": None, "accountsReceivable": None,

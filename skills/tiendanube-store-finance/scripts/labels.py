@@ -3,7 +3,8 @@ import unicodedata
 
 MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
           "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
-_MONTHSET = {m.lower() for m in MONTHS}
+MONTH_ALIASES = {"setiembre": "septiembre"}   # es-AR spelling variant
+_MONTHSET = {m.lower() for m in MONTHS} | set(MONTH_ALIASES)
 
 def normalize(s):
     if s is None:

@@ -29,7 +29,8 @@ def restate_series(series, months, serie, base_month, projected_inflation=None,
     for m, meas in zip(months, series):
         c = coef(serie, base_month, m)
         tag = "restated"
-        if c is None and projected_inflation is not None and last_actual_month and m > last_actual_month:
+        if (c is None and projected_inflation is not None and last_actual_month
+                and m is not None and m > last_actual_month):
             base_idx = serie.get(base_month)
             steps = _months_between(last_actual_month, m)
             proj_idx = serie[last_actual_month] * ((1 + projected_inflation) ** steps)

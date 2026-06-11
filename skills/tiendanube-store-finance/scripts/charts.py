@@ -1,11 +1,13 @@
 """Inline SVG charts for the finance report — zero dependencies, render in headless
 Chrome. Editorial-financial palette (burgundy/gold on cream) passed in by the report.
 All charts return an SVG string sized by viewBox so CSS scales them to the column."""
+import html as _html
 
 
 def _t(x, y, s, size=7, fill="#61574A", anchor="middle", font="Archivo", weight="400"):
     return (f'<text x="{x:.1f}" y="{y:.1f}" font-size="{size}" fill="{fill}" '
-            f'text-anchor="{anchor}" font-family="{font}" font-weight="{weight}">{s}</text>')
+            f'text-anchor="{anchor}" font-family="{font}" '
+            f'font-weight="{weight}">{_html.escape(str(s))}</text>')
 
 
 def bars(values, labels, accent, warm, money, w=540, h=150, pad=24, highlight=None):

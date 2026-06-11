@@ -79,8 +79,8 @@ real vs nominal) → **03** Rentabilidad y costos → **04** Caja y flujo de fon
 Punto de equilibrio → **06** Posición fiscal → **07** Proyección y escenarios → **08**
 Variación mensual → **09** Palancas / Acciones (tornado, no total) → **10** Ratios → **11**
 Conclusiones → **12** Supuestos y notas. Every non-`fact` figure carries a **provenance
-mark**: `ʳ` reexpresado · `ᵗ` impuesto modelado · `ˢ` supuesto · `ᵖ` inflación proyectada;
-the legend is in Supuestos.
+mark**: `ʳ` reexpresado · `ᵖ` inflación proyectada (`ᵗ` impuesto modelado and `ˢ` supuesto
+are reserved — not yet emitted by any code path); the legend is in Supuestos.
 
 ## Canonical model (schema 2.0)
 Every monetary figure is a **measure** `{nominal, real, source, transforms[]}` — see
@@ -95,7 +95,9 @@ If the analyzed/forecast period extends past `vigenciaHasta`, a warning is emitt
 the table from INDEC / ARCA.
 
 ## Mandatory gates (`gates.py`, run before render — hard failures raise)
-1. **Tie-out** — nominal Estado de Resultados ties to the workbook (≤ $1 / ≤ 0.1%).
+1. **Tie-out** — nominal Estado de Resultados ties to the workbook's own TOTAL/Anual
+   column when present (≤ $1 / ≤ 0.1%); falls back to Σ of the monthlies when the
+   workbook has no TOTAL column.
 2. **Composición** — no figure reexpressed twice (transforms deduped).
 3. **Reexpresión** — `baseMonth` present (else warning, report stays nominal).
 4. **Fiscal** — `fiscal` block present with a `regimen` key.

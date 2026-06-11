@@ -32,6 +32,70 @@ def test_error_cells_flagged_as_warning(tmp_path):
     assert fin["incomeStatement"]["monthly"]["utilidadNeta"] == [0.0, 0.0]
     assert any("utilidad neta" in w.lower() for w in fin["warnings"])
 
+def test_num_parses_es_ar_numeric_strings():
+    from workbook import _num
+    assert _num("$ 1.234,56") == 1234.56
+    assert _num("1.234") == 1234          # es-AR thousands, not 1.234
+    assert _num("-1.234,5") == -1234.5
+    assert _num("1234.56") == 1234.56     # plain decimal point
+    assert _num("1234") == 1234
+    assert _num("(1.234)") == -1234       # parenthesized negative
+    assert _num("12.345.678") == 12345678
+    assert _num("0,5") == 0.5
+    assert _num("abc") == 0               # unparseable text -> 0 (warned at line level)
+    assert _num("#REF!") == 0
+    assert _num("") == 0 and _num(None) == 0
+
+def test_text_cells_flagged_as_warning(tmp_path):
+    import openpyxl
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Resultados"
+    ws.cell(1,1,"FLUJOS DE DINERO")
+    for i,m in enumerate(["Enero","Febrero"]): ws.cell(3,2+i,m)
+    ws.cell(4,1,"Ingresos"); ws.cell(4,2,1); ws.cell(4,3,1)
+    ws.cell(9,1,"ESTADO DE RESULTADOS")
+    for i,m in enumerate(["Enero","Febrero"]): ws.cell(11,2+i,m)
+    ws.cell(12,1,"Ventas"); ws.cell(12,2,100); ws.cell(12,3,"abc")
+    p = tmp_path/"txtcell.xlsx"; wb.save(str(p))
+    fin = parse_workbook(str(p))
+    assert fin["incomeStatement"]["monthly"]["ventas"] == [100.0, 0]
+    assert any("texto no numérico" in w for w in fin["warnings"])
+
+def test_currency_text_cells_parsed_not_zeroed(tmp_path):
+    import openpyxl
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Resultados"
+    ws.cell(1,1,"FLUJOS DE DINERO")
+    for i,m in enumerate(["Enero","Febrero"]): ws.cell(3,2+i,m)
+    ws.cell(4,1,"Ingresos"); ws.cell(4,2,1); ws.cell(4,3,1)
+    ws.cell(9,1,"ESTADO DE RESULTADOS")
+    for i,m in enumerate(["Enero","Febrero"]): ws.cell(11,2+i,m)
+    ws.cell(12,1,"Ventas"); ws.cell(12,2,"$ 1.234,56"); ws.cell(12,3,200)
+    p = tmp_path/"cur.xlsx"; wb.save(str(p))
+    fin = parse_workbook(str(p))
+    assert fin["incomeStatement"]["monthly"]["ventas"] == [1234.56, 200]
+    assert not any("texto no numérico" in w for w in fin["warnings"])
+
+def _wb_with_total(tmp_path, total_val):
+    """2-month Estado de Resultados with a TOTAL column right after the months."""
+    import openpyxl
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Resultados"
+    ws.cell(1,1,"FLUJOS DE DINERO")
+    for i,m in enumerate(["Enero","Febrero"]): ws.cell(3,2+i,m)
+    ws.cell(4,1,"Ingresos"); ws.cell(4,2,1); ws.cell(4,3,1)
+    ws.cell(9,1,"ESTADO DE RESULTADOS")
+    for i,m in enumerate(["Enero","Febrero"]): ws.cell(11,2+i,m)
+    ws.cell(11,4,"TOTAL")
+    ws.cell(12,1,"Ventas"); ws.cell(12,2,100); ws.cell(12,3,200); ws.cell(12,4,total_val)
+    p = tmp_path/"tot.xlsx"; wb.save(str(p))
+    return str(p)
+
+def test_parse_workbook_captures_total_column(tmp_path):
+    fin = parse_workbook(_wb_with_total(tmp_path, 300))
+    assert fin["incomeStatement"]["annualFromWorkbook"]["ventas"] == 300
+
+def test_parse_workbook_omits_total_column_gracefully(fixture_workbook):
+    fin = parse_workbook(fixture_workbook)   # fixture has no TOTAL/Anual header
+    assert fin["incomeStatement"]["annualFromWorkbook"] is None
+
 def test_parse_workbook_selects_latest_year(tmp_path):
     import openpyxl
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Resultados"

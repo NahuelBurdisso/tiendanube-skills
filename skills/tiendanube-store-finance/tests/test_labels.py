@@ -8,6 +8,18 @@ def test_normalize_strips_accents_and_case():
 def test_months_constant_has_12():
     assert len(MONTHS) == 12 and MONTHS[0] == "Enero"
 
+def test_setiembre_variant_recognized_in_month_header():
+    # es-AR workbooks sometimes spell September "Setiembre" — must still match
+    wb = openpyxl.Workbook(); ws = wb.active
+    ws.cell(2, 2, "Setiembre"); ws.cell(2, 3, "Octubre")
+    row, start_col, months = find_month_header(ws, after_row=1)
+    assert row == 2 and start_col == 2
+    assert months == ["Setiembre", "Octubre"]
+
+def test_setiembre_resolves_to_month_9():
+    from financials import _month_keys
+    assert _month_keys(["Setiembre"], 2025) == ["2025-09"]
+
 def test_col_a_index_and_month_header(fixture_workbook):
     wb = openpyxl.load_workbook(fixture_workbook, data_only=True)
     ws = wb["Resultados"]

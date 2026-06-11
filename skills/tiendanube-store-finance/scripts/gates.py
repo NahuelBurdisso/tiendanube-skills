@@ -8,11 +8,19 @@ TOL_ABS = 1.0
 TOL_REL = 0.001
 
 def gate_tieout(fin):
-    a = fin["incomeStatement"]["annual"]; m = fin["incomeStatement"]["monthly"]
+    """Computed annual vs the workbook's own TOTAL/Anual column when captured
+    (the real tie-out); falls back to Σ of the monthlies when the column is absent."""
+    is_ = fin["incomeStatement"]
+    a = is_["annual"]; m = is_["monthly"]
+    wb = is_.get("annualFromWorkbook") or {}
     for key in ("ventas",):
-        annual = nom(a[key]); summed = sum(nom(x) for x in m[key])
-        if abs(annual - summed) > max(TOL_ABS, TOL_REL * abs(summed)):
-            raise GateError(f"Tie-out {key}: anual {annual} ≠ Σ mensual {summed}.")
+        annual = nom(a[key])
+        if wb.get(key) is not None:
+            ref, src = float(wb[key]), "TOTAL del workbook"
+        else:
+            ref, src = sum(nom(x) for x in m[key]), "Σ mensual"
+        if abs(annual - ref) > max(TOL_ABS, TOL_REL * abs(ref)):
+            raise GateError(f"Tie-out {key}: anual {annual} ≠ {src} {ref}.")
 
 def gate_composition(fin):
     """No figure may carry a duplicated transform (e.g. restated twice). Scans the

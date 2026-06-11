@@ -73,3 +73,30 @@ def test_monotributo_partial_year_no_false_exclusion():
     fin = build_financials(parsed)
     fin = fiscal.apply_fiscal(fin, {"fiscal": {"regimen": "monotributo", "categoriaMonotributo": "K"}})
     assert fin["fiscal"]["monotributo"]["proximidad"] > 1   # run-rate over techo, no exclusion raised
+
+
+def test_invalid_categoria_raises_clear_valueerror():
+    with pytest.raises(ValueError, match="categoriaMonotributo 'Z' inválida; usar A..K"):
+        fiscal.monotributo_status(categoria="Z", facturacion_anual_nominal=1000, tables=TABLES)
+
+
+def test_missing_categoria_raises_clear_valueerror():
+    with pytest.raises(ValueError, match="categoriaMonotributo"):
+        fiscal.monotributo_status(categoria=None, facturacion_anual_nominal=1000, tables=TABLES)
+
+
+def test_apply_fiscal_warns_past_vigencia():
+    # analyzed window extends past the bundled tables' vigenciaHasta (2026-07-31)
+    from financials import build_financials
+    keys = ["ventas","costoReposicion","comisiones","utilidadBruta","costosFijos",
+            "amortizacion","utilidadOperativa","gastosVariables","utilidadNeta"]
+    mp = {k: [0, 0] for k in keys}; mp["ventas"] = [100, 100]
+    parsed = {"months": ["Agosto","Septiembre"], "year": 2026,
+              "incomeStatement": {"monthly": mp},
+              "cashFlow": {"monthly": {"ingresos":[0,0],"egresos":[0,0],"total":[0,0]}},
+              "breakEven": {"margenBrutoMonthly": [], "facturacionEquilibrioMonthly": []},
+              "warnings": []}
+    fin = build_financials(parsed)
+    fin = fiscal.apply_fiscal(fin, {"fiscal": {"regimen": "monotributo",
+                                               "categoriaMonotributo": "A"}})
+    assert any("vigen" in w.lower() for w in fin["warnings"])

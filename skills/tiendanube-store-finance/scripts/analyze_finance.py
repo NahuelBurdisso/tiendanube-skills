@@ -15,13 +15,23 @@ from ratios_filter import filter_ratios
 from xlsx_report import write_xlsx
 from html_report import build_html
 
+SUPPORTED_SCHEMA_MAJOR = 2
+
+def check_schema_version(fin):
+    """Fail loudly on an unsupported major schemaVersion (schema-doc contract)."""
+    major = int(str(fin.get("schemaVersion", "0")).split(".")[0])
+    if major > SUPPORTED_SCHEMA_MAJOR:
+        raise ValueError(f"schemaVersion {fin.get('schemaVersion')!r} no soportada "
+                         f"(major > {SUPPORTED_SCHEMA_MAJOR}); actualizar los consumidores.")
+    return fin
+
 def run(workbook_path, config_path, out_dir):
     out_dir = pathlib.Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
     cfg = json.loads(pathlib.Path(config_path).read_text()) if config_path else {}
     fin_cfg = cfg.get("finance", {})
 
-    fin = build_financials(parse_workbook(workbook_path),
-                           store_name=cfg.get("brand", {}).get("name"))
+    fin = check_schema_version(build_financials(parse_workbook(workbook_path),
+                                                store_name=cfg.get("brand", {}).get("name")))
     fin = apply_fiscal(fin, cfg)  # taxes on NOMINAL (AFIP basis)
     fin = restate(fin, fin_cfg)   # reexpresión a moneda de cierre — ALWAYS last
     fin = gates.run_all(fin, cfg)  # mandatory data-integrity gates (raise on hard failure)
@@ -51,10 +61,19 @@ def run(workbook_path, config_path, out_dir):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("workbook")
-    ap.add_argument("--config", default="report.config.json")
+    ap.add_argument("--config", default=None,
+                    help="report.config.json (default: ./report.config.json si existe)")
     ap.add_argument("--out", default=".")
     args = ap.parse_args()
-    cfg = args.config if pathlib.Path(args.config).exists() else None
+    if args.config is not None:
+        # explicit --config must exist — a typo'd path would silently produce an
+        # unbranded report with the fiscal layer skipped
+        if not pathlib.Path(args.config).exists():
+            ap.error(f"--config {args.config!r} no existe; verificar la ruta.")
+        cfg = args.config
+    else:
+        # only the implicit default may be silently absent
+        cfg = "report.config.json" if pathlib.Path("report.config.json").exists() else None
     out = run(args.workbook, cfg, args.out)
     print(json.dumps({k: out[k] for k in ("financials","xlsx","html")}, indent=1))
 

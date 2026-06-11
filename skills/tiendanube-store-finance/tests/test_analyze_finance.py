@@ -53,3 +53,30 @@ def test_pipeline_runs_gates(fixture_workbook, tmp_path, monkeypatch):
     cfg_path = tmp_path / "c.json"; cfg_path.write_text(json.dumps(cfg))
     run(fixture_workbook, str(cfg_path), str(tmp_path))
     assert calls["n"] == 1
+
+
+def test_main_rejects_missing_explicit_config(fixture_workbook, tmp_path, monkeypatch):
+    import sys, pytest, analyze_finance
+    monkeypatch.setattr(sys, "argv", ["analyze_finance.py", fixture_workbook,
+                                      "--config", str(tmp_path / "nope.json"),
+                                      "--out", str(tmp_path)])
+    with pytest.raises(SystemExit) as e:
+        analyze_finance.main()
+    assert e.value.code != 0
+
+
+def test_main_tolerates_absent_default_config(fixture_workbook, tmp_path, monkeypatch, capsys):
+    import sys, analyze_finance
+    monkeypatch.chdir(tmp_path)            # no implicit report.config.json here
+    monkeypatch.setattr(sys, "argv", ["analyze_finance.py", fixture_workbook,
+                                      "--out", str(tmp_path)])
+    analyze_finance.main()                  # implicit default may be silently absent
+    assert "financials" in capsys.readouterr().out
+
+
+def test_unsupported_schema_major_raises():
+    import pytest
+    from analyze_finance import check_schema_version
+    check_schema_version({"schemaVersion": "2.0"})   # supported -> no raise
+    with pytest.raises(ValueError):
+        check_schema_version({"schemaVersion": "3.0"})

@@ -73,6 +73,84 @@ def test_report_has_new_sections_and_marks(fixture_workbook):
     assert "'nominal'" not in html and "{'nominal" not in html   # no measure dict leaks
 
 
+# ---------------------------------------------------------------------------
+# De-fossilized narrative — no ACME-engagement leftovers for other clients
+# ---------------------------------------------------------------------------
+_IS_KEYS = ["ventas","costoReposicion","comisiones","utilidadBruta","costosFijos",
+            "amortizacion","utilidadOperativa","gastosVariables","utilidadNeta"]
+
+def _fin_with(months, ventas, utilidad_neta=None, comisiones=None):
+    n = len(months)
+    mp = {k: [0]*n for k in _IS_KEYS}
+    mp["ventas"] = list(ventas)
+    mp["utilidadNeta"] = list(utilidad_neta if utilidad_neta is not None else ventas)
+    if comisiones is not None:
+        mp["comisiones"] = list(comisiones)
+    parsed = {"months": list(months), "year": 2025,
+              "incomeStatement": {"monthly": mp},
+              "cashFlow": {"monthly": {"ingresos":[0]*n,"egresos":[0]*n,"total":[0]*n}},
+              "breakEven": {"margenBrutoMonthly": [], "facturacionEquilibrioMonthly": []},
+              "warnings": []}
+    return build_financials(parsed)
+
+_TREND = {"trend_analysis": {"trend": {"direction": "upward", "r_squared": 0.9},
+                             "average_growth_rate": 0.05}}
+
+def test_rebound_month_helper_names_dominant_jump():
+    from html_report import _rebound_month
+    assert _rebound_month([100, 50, 200, 210], ["Ago","Sep","Oct","Nov"]) == "Oct"
+    assert _rebound_month([100, 150, 200, 250], ["Ago","Sep","Oct","Nov"]) is None  # broad-based
+    assert _rebound_month([200, 150, 100], ["Ago","Sep","Oct"]) is None             # no rebound
+
+def test_narrative_names_actual_rebound_month_not_febrero():
+    fin = _fin_with(["Agosto","Septiembre","Octubre","Noviembre"], [100, 50, 200, 210])
+    html = build_html(fin, {"forecast": _TREND, "ratios": {}, "variance": {}},
+                      {"brand": {"name": "A"}})
+    assert "recuperación de Octubre" in html
+    assert "febrero" not in html.lower()
+
+def test_narrative_drops_rebound_clause_when_growth_broad():
+    fin = _fin_with(["Agosto","Septiembre","Octubre","Noviembre"], [100, 150, 200, 250])
+    html = build_html(fin, {"forecast": _TREND, "ratios": {}, "variance": {}},
+                      {"brand": {"name": "A"}})
+    assert "está inflado por la recuperación" not in html
+
+def test_last_month_falling_clause_gated_on_delta():
+    rising = _fin_with(["Agosto","Septiembre","Octubre"], [100, 150, 200])
+    assert "el último a la baja" not in build_html(
+        rising, {"ratios": {}, "forecast": {}, "variance": {}}, {"brand": {"name": "A"}})
+    falling = _fin_with(["Agosto","Septiembre","Octubre"], [100, 200, 150])
+    assert "el último a la baja" in build_html(
+        falling, {"ratios": {}, "forecast": {}, "variance": {}}, {"brand": {"name": "A"}})
+
+def test_comisiones_rec_only_when_meaningful_share():
+    none = _fin_with(["Agosto","Septiembre"], [100, 100], comisiones=[0, 0])
+    assert "Atacar el costo de comisiones" not in build_html(
+        none, {"ratios": {}, "forecast": {}, "variance": {}}, {"brand": {"name": "A"}})
+    heavy = _fin_with(["Agosto","Septiembre"], [100, 100], comisiones=[10, 10])
+    assert "Atacar el costo de comisiones" in build_html(
+        heavy, {"ratios": {}, "forecast": {}, "variance": {}}, {"brand": {"name": "A"}})
+
+def test_rentable_en_los_ultimos_only_when_losses_at_start():
+    at_start = _fin_with(["Agosto","Septiembre","Octubre"], [100]*3,
+                         utilidad_neta=[-50, 100, 100])
+    assert "recién fue rentable en los últimos" in build_html(
+        at_start, {"ratios": {}, "forecast": {}, "variance": {}}, {"brand": {"name": "A"}})
+    at_end = _fin_with(["Agosto","Septiembre","Octubre"], [100]*3,
+                       utilidad_neta=[100, 100, -50])
+    html = build_html(at_end, {"ratios": {}, "forecast": {}, "variance": {}},
+                      {"brand": {"name": "A"}})
+    assert "recién fue rentable en los últimos" not in html
+    assert "pérdida neta en 1 de 3 meses" in html      # the loss count itself stays
+
+def test_month_names_escaped_in_table_header():
+    fin = _fin_with(["<Mes>", "Febrero"], [100, 100])
+    html = build_html(fin, {"ratios": {}, "forecast": {}, "variance": {}},
+                      {"brand": {"name": "A"}})
+    assert "<th class='r'><Mes></th>" not in html
+    assert "&lt;Mes&gt;" in html
+
+
 def test_report_break_even_nd_without_facturacion(fixture_workbook):
     # The fixture's PUNTO DE EQUILIBRIO has no "facturación necesaria" -> margenSeguridad None.
     # The report must show n/d, never a fabricated cushion (would contradict the silent lever).

@@ -17,3 +17,8 @@ def test_dual_bars_tolerates_missing_real():
 def test_tornado_orders_by_magnitude():
     svg = charts.tornado([("c",200),("a",100),("b",50)], "#6B2532", M)
     assert svg.index(">c<") < svg.index(">a<") < svg.index(">b<")
+
+
+def test_chart_text_labels_are_escaped():
+    out = charts._t(0, 0, '<b>x</b> & "y"')
+    assert "<b>" not in out and "&lt;b&gt;" in out and "&amp;" in out
