@@ -19,8 +19,11 @@ import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'node:fs
 function loadEnv() {
   if (!existsSync('.env')) return;
   for (const line of readFileSync('.env', 'utf8').split('\n')) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
+    if (!m || process.env[m[1]]) continue;
+    let v = m[2].trim();
+    if (v.length >= 2 && (v[0] === '"' || v[0] === "'") && v.endsWith(v[0])) v = v.slice(1, -1);
+    process.env[m[1]] = v;
   }
 }
 loadEnv();
@@ -38,7 +41,7 @@ if (!code) {
 
 function upsertEnv(key, val) {
   let env = existsSync('.env') ? readFileSync('.env', 'utf8') : '';
-  const re = new RegExp(`^${key}=.*$`, 'm');
+  const re = new RegExp(`^\\s*${key}\\s*=.*$`, 'm');
   if (re.test(env)) { env = env.replace(re, `${key}=${val}`); writeFileSync('.env', env); }
   else appendFileSync('.env', `${env.endsWith('\n') || env === '' ? '' : '\n'}${key}=${val}\n`);
 }
@@ -48,8 +51,15 @@ const res = await fetch('https://www.tiendanube.com/apps/authorize/token', {
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ client_id: APP_ID, client_secret: SECRET, grant_type: 'authorization_code', code }),
 });
-const j = await res.json();
-if (j.error) { console.error('EXCHANGE FAILED:', j.error, j.error_description || ''); console.error('(codes are single-use — get a fresh one from the authorize URL)'); process.exit(2); }
+const text = await res.text();
+let j;
+try { j = JSON.parse(text); }
+catch { console.error(`EXCHANGE FAILED: HTTP ${res.status}, non-JSON response:\n${text.slice(0, 300)}`); process.exit(2); }
+if (!res.ok || j.error || !j.access_token) {
+  console.error('EXCHANGE FAILED:', `HTTP ${res.status}`, j.error || '', j.error_description || '');
+  console.error('(codes are single-use — get a fresh one from the authorize URL)');
+  process.exit(2);
+}
 
 upsertEnv('TIENDANUBE_ACCESS_TOKEN', j.access_token);
 upsertEnv('TIENDANUBE_STORE_ID', j.user_id);

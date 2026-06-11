@@ -23,8 +23,11 @@ import { readFileSync, existsSync } from 'node:fs';
 function loadEnv() {
   if (!existsSync('.env')) return;
   for (const line of readFileSync('.env', 'utf8').split('\n')) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
+    if (!m || process.env[m[1]]) continue;
+    let v = m[2].trim();
+    if (v.length >= 2 && (v[0] === '"' || v[0] === "'") && v.endsWith(v[0])) v = v.slice(1, -1);
+    process.env[m[1]] = v;
   }
 }
 loadEnv();

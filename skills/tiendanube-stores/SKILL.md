@@ -19,7 +19,22 @@ Plan/Impulso tier is required to edit theme code at all (lower tiers lock the th
 | `create-catalog.mjs` + `catalog.example.json` | Bulk-create categories+products from a JSON file (any store). | `node create-catalog.mjs catalog.json` |
 | `safe-push.sh` | FTP push without uploading `.git`, requires a git restore point. | `./safe-push.sh <theme-dir>` |
 
-Workflow for a NEW store: get creds (`oauth-token.mjs`) → `.env` → seed data (`create-catalog.mjs`) → pull theme (`ftp pull`) → port design → `safe-push.sh`. All verified working against a live store.
+Workflow for a NEW store: `mkdir ~/Desktop/Projects/<store>` (layout below) → copy toolkit into `store/` → creds (`oauth-token.mjs`) → `.env` → seed data (`create-catalog.mjs`) → `ftp pull` into `theme-pristine/`, copy to `theme/` → port design → `safe-push.sh theme/`. All verified working against a live store.
+
+## Project layout — ONE folder per store
+
+Every store gets its own project folder `~/Desktop/Projects/<store>/`. Never mix two stores in one tree. Inside:
+
+| Folder | Holds |
+|---|---|
+| `theme/` | FTP working copy — pulled theme + your redesign edits. **This is the push source** (`safe-push.sh theme/`). |
+| `theme-pristine/` | Untouched `ftp pull` = restore point. Own `git init` + one "pristine" commit. Never edit; `git checkout` from here to roll back a bad push. |
+| `store/` | Data tooling copied from this skill (`tn-api.mjs`, `oauth-token.mjs`, `create-catalog.mjs`), `.env` (creds, gitignored), catalog JSON. All Admin-API / data work runs here. |
+| `reports/` | Analysis + reporting, itself split: `scripts/` (`.mjs` analysis/API tooling), `data/` (`.json` — `analysis.json`, `money.json`, `financials.json`), `sources/` (editable report `.html` that gets printed to PDF), `deliverables/` (finished client PDFs/XLSX). `.env` + `report.config.json` stay at the `reports/` root. |
+| `redesign/` | Optional Astro demo / mockups + build tooling, itself split: `app/` (the Astro project — `src public astro.config.mjs package.json node_modules dist`), `tooling/` (`*.py *.sh` build scripts), `output/` (generated screenshots, harness, `lookbook.html`), `deliverables/` (final lookbook PDF). Scripts anchor to the `redesign/` root via `__file__` (`ROOT = dirname(dirname(__file__))`) and reference `app/dist`, `output/…`, `../theme` — so they live in `tooling/` yet the harness HTTP server (rooted at `redesign/`) still serves `/theme`, `/app/dist/img`, `/output/harness`. |
+| `docs/` | Specs, plans, notes (`.md`). Keep `README.md` at the store-folder root. |
+
+**Reorg rule:** the `.env` loader and most scripts read **cwd-relative** bare paths (`existsSync('.env')`), so **always run scripts from the `reports/` (or store) root** — that's the cwd the `.env`/config resolve against. You *can* split `scripts/` from `data/`/`sources/` (cleaner for a full project), but only if the script writes there explicitly: either it's stdout (`node scripts/money.mjs > data/money.json`), or its read/write paths are made root-relative (`data/analysis.json`, `sources/report.html`) or set via an out-dir flag/env (`REPORTS_DATA=data`, `analyze_finance.py --out data`, `render.sh sources/x.html deliverables/x.pdf`). Never leave a script pointing at a bare filename whose file you moved into a subfolder — update the path or it breaks. Finished client artifacts (PDFs/XLSX/decks) always go in `deliverables/`.
 
 ## CLI — theme dev (legacy FTP)
 
@@ -107,6 +122,8 @@ Library: `import { listProducts, createProduct, updateProduct, deleteProduct, cr
 - Images: pass a **public URL** in `src` — the API fetches it and re-hosts on the TN CDN (or POST base64 to `/products/{id}/images`).
 - Coupons: `POST /coupons { code, type:"percentage"|"absolute", value, valid, max_uses, ... }`.
 - Bulk seed: put the whole catalog in a JSON file and run `node create-catalog.mjs catalog.json` (see `catalog.example.json`).
+- Catalogs with `variants` REQUIRE a top-level `"attribute"` (e.g. `"Talle"`) — without it the API 422s every variant product.
+- `create-catalog.mjs` is NOT idempotent — re-running it duplicates categories and products.
 
 **Customizer caveat:** creating products does NOT auto-place them in `sections.primary` (Destacados) — that needs a customizer "Productos" section. But `sections.new` auto-fills from newest products, so a wired home grid usually lights up once products exist. WhatsApp number, featured sections, popup config, category-tile images = admin/customizer only (no API, not in theme files).
 

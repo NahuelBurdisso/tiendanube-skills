@@ -9,7 +9,7 @@
 
    Catalog shape:
    {
-     "attribute": "Talle",                 // optional; omit for no-variant products
+     "attribute": "Talle",                 // REQUIRED if any product has variants; omit only when none do
      "categories": [ { "name": "Urbanas", "description": "..." } ],
      "products": [
        { "name": "Aura Low", "category": "Urbanas", "price": 89999,
@@ -25,6 +25,13 @@ import { es, money, promo, createCategory, createProduct, getStore, sleep } from
 
 const file = process.argv[2] || 'catalog.json';
 const cat = JSON.parse(readFileSync(file, 'utf8'));
+
+if (!cat.attribute && (cat.products || []).some((p) => p.variants?.length)) {
+  console.error(`ERROR: ${file} has products with "variants" but no top-level "attribute".`);
+  console.error('The API rejects variant values without an attribute name (422 on every product).');
+  console.error('Add e.g. "attribute": "Talle" at the top level of the catalog JSON and retry.');
+  process.exit(1);
+}
 
 function buildVariants(p) {
   const price = money(p.price);
