@@ -44,5 +44,24 @@ Trailing-twelve-months paid revenue (annualized if <12 months of history). More 
 | Categories | `/categories` | `parent` tree |
 | Coupons | `/coupons` | `used` |
 
-## A note on the strategic (narrative) report
-The financial report is fully automatable. A **strategic/narrative** report (page-by-page redesign scope, institutional-page gaps, plan/Impulso requirements) is store-specific prose — author it by hand using `analysis.json` as the factual spine, reusing the same CSS/brand tokens from `build-report.mjs` for visual consistency. Mark anything that depends on client-provided content or paid apps as such; don't list it as a dev deliverable.
+## Page-break discipline (BOTH report types)
+A4 print has hard page jumps. Defaults that prevent ugly cuts:
+- `tr{page-break-inside:avoid}`, `.callout`/`.chartbox{page-break-inside:avoid}` — already in the CSS; they keep rows and cards whole.
+- **`.sec{break-inside:avoid}`** — wrap EVERY section (its `<h3>`/`<h4>` + the table/stats/list/paragraphs that belong to it) in `<div class="sec">…</div>`. This is what stops a *section* (heading + body) from splitting across a page. Without it, a heading orphans at a page bottom and its table flows to the next page.
+- If a `.sec` is taller than a page it still must split — then shorten it or break it into two `.sec` blocks (e.g. one table → two).
+- **Verify by rasterizing, every time:** `pdftoppm -png -r 90 report.pdf /tmp/pg && open /tmp/pg-*.png`, then eyeball each page. A section split across pages = a `.sec` to add or tighten. Re-render until clean. Near-empty pages where a whole `.callout`/`.sec` jumped (rather than split) are acceptable.
+
+## The strategic (narrative) report
+The financial report is fully automatable (`build-report.mjs`). A **strategic/narrative** report (diagnosis + plan + investment, page-by-page redesign scope, institutional-page gaps, plan/Impulso requirements) is store-specific prose — author it by hand.
+
+**Start from `assets/narrative-report-template.html`** (copy → `report.html`, recolor the `:root` tokens, fill with real numbers from `analysis.json`). Same CSS/brand tokens as `build-report.mjs`, so both decks look alike.
+
+**Proven three-informe structure** (keep state and work in *separate* informes — never mix a finding with its action):
+| # | Informe | Contains |
+|---|---|---|
+| 00 | Resumen ejecutivo | headline stats + "la foto en una frase" + how-to-read |
+| 01 | **Estado actual** | diagnosis ONLY, no actions — SEO, catálogo, categorías, pagos, clientes, marca (fold shipping in as a fact). Pills used as state flags (`bug`/`bien`), not imperatives. |
+| 02 | **Trabajo a realizar** | all the work — **Parte 1** puesta a punto de datos (action table) + **Parte 2** rediseño del theme (A componentes / B home / C ficha / D resto, fases, "qué NO cambia") |
+| 03 | **Inversión** | one-time price + included deliverables (each mapping to Informe 02) + recurring platform plan |
+
+Honesty rules: mark anything that depends on client-provided content or paid apps as such — don't list it as a dev deliverable. Every figure traces to data; estimates are stated as estimates.

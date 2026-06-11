@@ -6,6 +6,12 @@
 // Levers are FORMULA-BASED (defensible), tunable via ./report.config.json -> {assumptions:{...}}.
 import fs from 'fs'
 
+// ---- output dir: flat by default ('.'); set REPORTS_DATA=data for the deep
+//      per-store layout (reports/{scripts,data,sources,deliverables}). .env +
+//      report.config.json are always read from cwd (the reports root). ----
+const DATA = process.env.REPORTS_DATA || '.'
+if (DATA !== '.') fs.mkdirSync(DATA, { recursive: true })
+
 // ---- env ----
 for (const line of fs.existsSync('.env') ? fs.readFileSync('.env','utf8').split('\n') : []) {
   if (/^\s*#/.test(line)) continue
@@ -16,27 +22,29 @@ const BASE = (process.env.API_BASE || 'https://api.tiendanube.com/v1').replace(/
 const UA = `store-audit (${process.env.CONTACT_EMAIL || 'audit@example.com'})`
 if (!TOKEN || !STORE) { console.error('Missing TIENDANUBE_ACCESS_TOKEN / TIENDANUBE_STORE_ID in .env'); process.exit(1) }
 
-// ---- tiny API client w/ pagination + 429 retry ----
+// ---- tiny API client w/ pagination + 429/5xx retry ----
 async function api(path, params = {}) {
   const qs = new URLSearchParams(params).toString()
   const url = `${BASE}/${STORE}${path}${qs ? '?' + qs : ''}`
+  let last = 0
   for (let i = 0; i < 6; i++) {
     const r = await fetch(url, { headers: { Authentication: `bearer ${TOKEN}`, 'User-Agent': UA, 'Content-Type': 'application/json' } })
-    if (r.status === 429) { await new Promise(s => setTimeout(s, 2000)); continue }
-    if (!r.ok) throw new Error(`${r.status} ${path}: ${(await r.text()).slice(0,200)}`)
+    if ([429, 500, 502, 503].includes(r.status)) { last = r.status; await new Promise(s => setTimeout(s, 2000 * (i + 1))); continue }
+    if (!r.ok) { const e = new Error(`${r.status} ${path}: ${(await r.text()).slice(0,200)}`); e.status = r.status; throw e }
     return { data: await r.json(), link: r.headers.get('link') || '' }
   }
-  throw new Error(`429 retries exhausted ${path}`)
+  const e = new Error(`${last} retries exhausted ${path}`); e.status = last; throw e
 }
+const partial = new Set() // endpoints whose page cap was hit (results truncated)
 async function listAll(path, params = {}, cap = 60) {
   let out = []
   for (let page = 1; page <= cap; page++) {
     let res
     try { res = await api(path, { ...params, per_page: '200', page: String(page) }) }
-    catch (e) { if (page === 1) throw e; break }
+    catch (e) { if (page > 1 && e.status === 404) break; throw e } // 404 past page 1 = end of data; anything else rethrows
     out = out.concat(res.data || [])
     if (!res.link || !res.link.includes('rel="next"') || (res.data || []).length < 200) return out
-    if (page === cap) console.error(`⚠ ${path}: reached ${cap*200}-record cap, results may be partial`)
+    if (page === cap) { console.error(`⚠ ${path}: reached ${cap*200}-record cap, results may be partial`); partial.add(path) }
   }
   return out
 }
@@ -92,8 +100,9 @@ const gateway = Object.entries(gR).sort((a, b) => b[1] - a[1]).map(([g, v]) => (
 
 // leaks
 console.error('Fetching checkouts (abandoned)…')
-let checkouts = []
-try { checkouts = await listAll('/checkouts', { fields: 'id,total,completed_at,created_at,contact_email' }) } catch {}
+let checkouts = [], checkoutsUnavailable = false
+try { checkouts = await listAll('/checkouts', { fields: 'id,total,completed_at,created_at,contact_email' }) }
+catch (e) { checkoutsUnavailable = true; console.error(`⚠ /checkouts unavailable (${e.message}) — abandoned-cart lever omitted`) }
 const aband = checkouts.filter(c => !c.completed_at)
 const abVal = Math.round(aband.reduce((s, c) => s + N(c.total), 0))
 const cd = aband.map(c => S(c.created_at)).filter(Boolean).sort()
@@ -102,7 +111,7 @@ const abandYr = Math.round(abVal * 365 / windowDays)
 const pend = orders.filter(o => o.payment_status === 'pending')
 const canc = orders.filter(o => o.status === 'cancelled')
 const leaks = {
-  abandoned: { n: aband.length, val: abVal, withEmail: aband.filter(c => c.contact_email).length, windowDays, annualized: abandYr },
+  abandoned: { n: aband.length, val: abVal, withEmail: aband.filter(c => c.contact_email).length, windowDays, annualized: abandYr, ...(checkoutsUnavailable ? { unavailable: true } : {}) },
   pending: { n: pend.length, val: Math.round(pend.reduce((s, o) => s + N(o.total), 0)) },
   cancelled: { n: canc.length, val: Math.round(canc.reduce((s, o) => s + N(o.total), 0)) },
 }
@@ -144,7 +153,8 @@ const categories = { total: cats.length, topLevel: cats.filter(c => c.parent ===
 
 // coupons
 let coupons = { total: 0, used: 0 }
-try { const cp = await listAll('/coupons'); coupons = { total: cp.length, used: cp.reduce((s, c) => s + N(c.used), 0) } } catch {}
+try { const cp = await listAll('/coupons'); coupons = { total: cp.length, used: cp.reduce((s, c) => s + N(c.used), 0) } }
+catch (e) { coupons.unavailable = true; console.error(`⚠ /coupons unavailable (${e.message}) — coupon metrics omitted`) }
 
 // top sellers by revenue
 const rev = {}, un = {}
@@ -173,8 +183,8 @@ const out = {
   generatedAt: new Date().toISOString(),
   store: { id: store.id, name: T(store.name), domain: (store.url_with_protocol || (store.domains || [])[0] || ''), theme: store.current_theme, plan: store.plan_name, currency: store.main_currency, logo: store.logo, description: T(store.description), whatsapp: store.whatsapp_phone_number, instagram: store.instagram },
   lifetime, runRate, yearly, monthly, gateway, leaks, customers: cust, products, categories, coupons, topRev,
-  assumptions: A, levers, totalUpside,
+  assumptions: A, levers, totalUpside, partial: [...partial],
 }
-fs.writeFileSync('analysis.json', JSON.stringify(out, null, 1))
-console.error(`\n✓ analysis.json written`)
+fs.writeFileSync(`${DATA}/analysis.json`, JSON.stringify(out, null, 1))
+console.error(`\n✓ ${DATA}/analysis.json written`)
 console.log(JSON.stringify({ store: out.store.name, products: products.total, paidOrders: lifetime.orders, lifetimeRev: lifetime.rev, runRate, totalUpside, levers: levers.map(l => ({ [l.key]: l.val })) }, null, 1))

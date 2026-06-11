@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<!--
+  NARRATIVE / STRATEGIC REPORT TEMPLATE  (Tienda Nube store audit)
+  ============================================================================
+  This is the editorial template for a HAND-AUTHORED strategic report
+  (diagnosis + plan + investment). The fully-automated financial report comes
+  from build-report.mjs; THIS one is prose you write, with analysis.json as the
+  factual spine. Same CSS/brand tokens as build-report.mjs, so both look alike.
+
+  HOW TO USE
+  1. Copy this file into the working dir as report.html (or informe-<store>.html).
+  2. Recolor: edit the :root tokens (--bordo, --camel) only. Keep the rest.
+  3. Fill the cover + the three informes with REAL numbers from analysis.json.
+     Every figure must trace to data — no invented stats.
+  4. Structure rule (proven): three top-level informes —
+       01 ESTADO ACTUAL   = diagnosis only, NO actions (just the facts/numbers)
+       02 TRABAJO A REALIZAR = all the work, split into Parte 1 (data/catalog/SEO
+                               puesta a punto) + Parte 2 (theme redesign)
+       03 INVERSIÓN       = price + what's included, mapped to Informe 02
+     Keep "how it is now" and "what we'll do" in SEPARATE informes — never mix
+     a finding with its action in the same place.
+  5. PAGE-BREAK DISCIPLINE (mandatory): wrap EVERY section in <div class="sec">.
+     .sec is break-inside:avoid, so a section never splits across a page jump.
+     A heading + its table/stats/list/paragraphs must live inside one .sec.
+     Callouts (.callout) and table rows (tr) already avoid breaking on their own.
+  6. Render: ./render.sh report.html report.pdf
+  7. VERIFY (mandatory): rasterize and eyeball every page for cut sections —
+       pdftoppm -png -r 90 report.pdf /tmp/pg && open /tmp/pg-*.png
+     If a section is split, it's too tall for a page → shorten it or split it
+     into two .sec blocks. Re-render. Repeat until no section is cut.
+
+  Honesty rules (same as the skill): mark anything that needs client-provided
+  content or a paid external app AS SUCH — never list it as a dev deliverable.
+  Every number carries its source; estimates are stated as estimates.
+-->
+<head>
+<meta charset="UTF-8">
+<title>{{STORE}} — Informe estratégico</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;0,6..96,600;0,6..96,700;1,6..96,400;1,6..96,500&family=Archivo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* RECOLOR HERE ONLY — accent = brand primary, camel = secondary warm */
+    --bg:#F4EFE6; --surface:#FBF8F2; --surface-deep:#EAE2D4;
+    --text:#2A211A; --ink:#1A1512; --muted:#61574A;
+    --bordo:#6B2532; --camel:#B08858; --line:#D9CFBE;
+    --good:#3F6B4A; --warn:#9A6B1E; --bad:#8C2D2D;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  @page{ size:A4; margin:18mm 0 16mm 0; }
+  html{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body{
+    font-family:'Archivo',sans-serif; color:var(--text); background:var(--bg);
+    font-size:10.2px; line-height:1.55; font-weight:400;
+  }
+  .page{ padding:0 18mm; }
+  h1,h2,h3,.display{ font-family:'Bodoni Moda',serif; font-weight:500; letter-spacing:-.01em; color:var(--ink); }
+  .label{ font-family:'Archivo'; text-transform:uppercase; letter-spacing:.22em; font-size:8px; font-weight:600; color:var(--muted); }
+  .accent{ color:var(--bordo); }
+  em{ font-style:italic; }
+
+  /* COVER */
+  .cover{ height:261mm; display:flex; flex-direction:column; justify-content:space-between; padding:24mm 18mm; page-break-after:always; position:relative; }
+  .cover .wordmark{ font-family:'Bodoni Moda'; font-weight:600; font-size:13px; letter-spacing:.5em; text-transform:uppercase; }
+  .cover .rule{ height:1px; background:var(--line); margin:6mm 0; }
+  .cover h1{ font-size:58px; line-height:1.02; font-weight:500; margin-top:auto; }
+  .cover h1 .it{ font-style:italic; color:var(--bordo); }
+  .cover .sub{ font-size:13px; color:var(--muted); margin-top:8mm; max-width:120mm; line-height:1.6; }
+  .cover .meta{ margin-top:14mm; display:flex; gap:14mm; }
+  .cover .meta div span{ display:block; }
+  .cover .bigstat{ position:absolute; right:18mm; top:60mm; text-align:right; }
+  .cover .bigstat .n{ font-family:'Bodoni Moda'; font-size:46px; color:var(--bordo); line-height:1; }
+  .cover .bigstat .c{ font-size:9px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
+
+  /* SECTION HEADERS */
+  .section-open{ page-break-before:always; padding-top:6mm; }
+  .kicker{ display:flex; align-items:center; gap:8px; margin-bottom:4mm; }
+  .kicker .num{ font-family:'Bodoni Moda'; font-size:13px; color:var(--bordo); }
+  h2.report{ font-size:30px; line-height:1.05; margin-bottom:3mm; }
+  .lede{ font-size:11.5px; color:var(--muted); max-width:150mm; line-height:1.6; margin-bottom:7mm; }
+
+  h3{ font-size:15px; margin:7mm 0 3mm; padding-bottom:2mm; border-bottom:1px solid var(--line); }
+  h3 .label{ float:right; padding-top:4px; }
+  p{ margin-bottom:2.5mm; }
+  p.note{ color:var(--muted); }
+
+  /* keep a whole section on one page — never split a section across a page jump */
+  .sec{ break-inside:avoid; page-break-inside:avoid; }
+  .sec h3{ margin-top:0; }
+  .sec > h4:first-child{ margin-top:0; }
+
+  /* STAT STRIP */
+  .stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:3mm; margin:4mm 0 6mm; }
+  .stat{ background:var(--surface); border:1px solid var(--line); padding:4mm; }
+  .stat .n{ font-family:'Bodoni Moda'; font-size:22px; color:var(--ink); line-height:1; }
+  .stat .n.accent{ color:var(--bordo); }
+  .stat .c{ font-size:8.5px; color:var(--muted); margin-top:2mm; line-height:1.4; }
+
+  /* TABLES */
+  table{ width:100%; border-collapse:collapse; margin:3mm 0 5mm; font-size:9.4px; }
+  th{ text-align:left; font-weight:600; text-transform:uppercase; letter-spacing:.08em; font-size:8px; color:var(--muted); border-bottom:1.5px solid var(--ink); padding:2mm 2.5mm; }
+  td{ padding:2.2mm 2.5mm; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr{ page-break-inside:avoid; }
+  td.r,th.r{ text-align:right; font-variant-numeric:tabular-nums; }
+  .pill{ display:inline-block; padding:1px 6px; border-radius:10px; font-size:7.5px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
+  .p-bad{ background:#f3dede; color:var(--bad); }
+  .p-warn{ background:#f3e7d0; color:var(--warn); }
+  .p-good{ background:#dfe9e0; color:var(--good); }
+  .p-info{ background:var(--surface-deep); color:var(--text); }
+
+  /* CARD / CALLOUT */
+  .callout{ background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--bordo); padding:4mm 5mm; margin:4mm 0; page-break-inside:avoid; }
+  .callout h4{ font-family:'Bodoni Moda'; font-size:13px; font-weight:500; margin-bottom:2mm; }
+  .twocol{ column-count:2; column-gap:8mm; }
+
+  /* CHECKLIST */
+  ul.check{ list-style:none; }
+  ul.check li{ position:relative; padding-left:7mm; margin-bottom:2.5mm; page-break-inside:avoid; }
+  ul.check li:before{ content:"—"; position:absolute; left:0; color:var(--bordo); font-family:'Bodoni Moda'; }
+  ul.check li b{ font-weight:600; }
+  ul.plain{ list-style:none; }
+  ul.plain li{ padding-left:5mm; margin-bottom:1.8mm; position:relative; }
+  ul.plain li:before{ content:"·"; position:absolute; left:1mm; color:var(--camel); font-weight:700; }
+
+  .phase{ display:flex; gap:4mm; margin-bottom:3mm; page-break-inside:avoid; align-items:baseline; }
+  .phase .pn{ font-family:'Bodoni Moda'; font-size:20px; color:var(--bordo); width:9mm; flex-shrink:0; }
+  .phase .pb b{ font-weight:600; }
+
+  .footer-note{ margin-top:8mm; padding-top:4mm; border-top:1px solid var(--line); font-size:8.5px; color:var(--muted); }
+  .bracket{ color:var(--camel); }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <div>
+    <div class="wordmark">{{STORE}}</div>
+    <div class="rule"></div>
+    <div class="label">Informe estratégico · Tienda online</div>
+  </div>
+
+  <div class="bigstat">
+    <div class="n">{{HEADLINE_STAT}}</div>
+    <div class="c">{{HEADLINE_CAPTION}}</div>
+  </div>
+
+  <div>
+    <h1>Diagnóstico<br>y plan de<br><span class="it">mejoras</span>.</h1>
+    <p class="sub">Análisis completo de la tienda sobre datos reales de la plataforma: catálogo, ventas, clientes, configuración y diseño. Tres informes: el estado actual de la tienda, el trabajo a realizar y la inversión.</p>
+    <div class="meta">
+      <div><span class="label">Preparado para</span><span style="font-size:12px;margin-top:2mm">{{CLIENT}}</span></div>
+      <div><span class="label">Tienda</span><span style="font-size:12px;margin-top:2mm">{{DOMAIN}}</span></div>
+      <div><span class="label">Fecha</span><span style="font-size:12px;margin-top:2mm">{{DATE}}</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 00 · RESUMEN EJECUTIVO ============ -->
+<div class="page section-open">
+  <div class="kicker"><span class="num">00</span><span class="label">Resumen ejecutivo</span></div>
+  <h2 class="report">{{ONE_LINE_THESIS}}</h2>
+  <p class="lede">{{FRAMING_PARAGRAPH}}</p>
+
+  <!-- 4 headline stats from analysis.json: run-rate, AOV, growth, customers -->
+  <div class="stats">
+    <div class="stat"><div class="n accent">{{STAT1}}</div><div class="c">{{STAT1_CAPTION}}</div></div>
+    <div class="stat"><div class="n">{{STAT2}}</div><div class="c">{{STAT2_CAPTION}}</div></div>
+    <div class="stat"><div class="n accent">{{STAT3}}</div><div class="c">{{STAT3_CAPTION}}</div></div>
+    <div class="stat"><div class="n">{{STAT4}}</div><div class="c">{{STAT4_CAPTION}}</div></div>
+  </div>
+
+  <div class="callout">
+    <h4>La foto en una frase</h4>
+    <p>{{SUMMARY_PARAGRAPH — the store's situation in one honest paragraph}}</p>
+  </div>
+
+  <div class="callout">
+    <h4>Cómo leer este documento</h4>
+    <p><b>Informe 01 — Estado actual:</b> la foto de la tienda hoy, sobre datos reales, sin acciones. <b>Informe 02 — Trabajo a realizar:</b> lo que se hace. <b>Informe 03 — Inversión:</b> qué cuesta y qué incluye.</p>
+  </div>
+</div>
+
+<!-- ============ 01 · ESTADO ACTUAL (diagnosis only — NO actions) ============ -->
+<div class="page section-open">
+  <div class="kicker"><span class="num">01</span><span class="label">Informe uno · Estado actual</span></div>
+  <h2 class="report">Cómo está la tienda hoy.</h2>
+  <p class="lede">La foto de la tienda sobre datos reales de la plataforma. Solo el diagnóstico — el trabajo a realizar va en el Informe 02.</p>
+
+  <!-- One .sec per topic. Examples of each component below. Numbers from analysis.json. -->
+
+  <div class="sec">
+  <h3>① SEO <span class="label">crecimiento orgánico</span></h3>
+  <p>{{SEO state in prose}}</p>
+  <div class="stats">
+    <div class="stat"><div class="n accent">{{X/Y}}</div><div class="c">Productos sin título SEO</div></div>
+    <div class="stat"><div class="n accent">{{X/Y}}</div><div class="c">Sin descripción SEO</div></div>
+    <div class="stat"><div class="n">{{home title}}</div><div class="c">Título de la home</div></div>
+    <div class="stat"><div class="n">{{vacía?}}</div><div class="c">Descripción de la tienda</div></div>
+  </div>
+  </div>
+
+  <div class="sec">
+  <h3>② Calidad del catálogo</h3>
+  <!-- Diagnostic table: facts + neutral "Lectura". Use pills as STATE flags (bug/bien), not imperatives. -->
+  <table>
+    <tr><th>Punto</th><th class="r">Número</th><th>Lectura</th></tr>
+    <tr><td>Precios en $0 (bug visible)</td><td class="r">{{n}}</td><td><span class="pill p-bad">bug</span> {{names}}</td></tr>
+    <tr><td>Publicados sin stock</td><td class="r">{{n}}</td><td>Visibles pero no se pueden comprar</td></tr>
+    <tr><td>Una sola foto</td><td class="r">{{n}}</td><td>Menos conversión que con 2ª imagen</td></tr>
+    <tr><td>Catálogo fresco</td><td class="r">{{n}}</td><td><span class="pill p-good">bien</span> mercadería viva</td></tr>
+  </table>
+  </div>
+
+  <div class="sec">
+  <h3>③ Estructura de categorías</h3>
+  <p>{{state of category tree}}</p>
+  <div class="twocol">
+    <ul class="plain">
+      <li>{{Categoría}} — {{n}}</li>
+      <!-- … one li per category … -->
+    </ul>
+  </div>
+  </div>
+
+  <div class="sec">
+  <h3>④ Pagos — una pista de margen</h3>
+  <table>
+    <tr><th>Medio</th><th class="r">Pedidos</th><th class="r">Facturación</th><th class="r">%</th></tr>
+    <tr><td>{{gateway}}</td><td class="r">{{n}}</td><td class="r">{{$}}</td><td class="r">{{%}}</td></tr>
+  </table>
+  <p>{{the margin observation as a FACT, not a recommendation}}</p>
+  </div>
+
+  <div class="sec">
+  <h3>⑤ Clientes</h3>
+  <div class="stats">
+    <div class="stat"><div class="n">{{registered}}</div><div class="c">Clientes registrados</div></div>
+    <div class="stat"><div class="n">{{buyers}}</div><div class="c">Compradores efectivos</div></div>
+    <div class="stat"><div class="n accent">{{repeat%}}</div><div class="c">Recompra</div></div>
+    <div class="stat"><div class="n">{{top}}</div><div class="c">Mayor cliente histórico</div></div>
+  </div>
+  <p class="note">{{repeat/AOV fact}}</p>
+  </div>
+
+  <div class="sec">
+  <h3>⑥ Marca y datos de tienda</h3>
+  <ul class="check">
+    <li><b>Logo:</b> {{state}}</li>
+    <li><b>Descripción de la tienda:</b> {{state}}</li>
+    <li><b>Redes:</b> {{state}}</li>
+    <li><b>Envíos:</b> {{shipping config state — fold shipping in here as a fact}}</li>
+  </ul>
+  </div>
+</div>
+
+<!-- ============ 02 · TRABAJO A REALIZAR (all actions) ============ -->
+<div class="page section-open">
+  <div class="kicker"><span class="num">02</span><span class="label">Informe dos · Trabajo a realizar</span></div>
+  <h2 class="report">Qué se hace, en dos frentes.</h2>
+  <p class="lede">El trabajo va en dos partes que avanzan juntas: <b>poner a punto los datos</b> y <b>publicar el rediseño</b>. Cada acción mapea contra el estado del Informe 01.</p>
+
+  <div class="callout">
+    <h4>Plan priorizado (retorno sobre esfuerzo)</h4>
+    <ol style="margin-left:5mm; font-size:9.6px;">
+      <li>{{quick wins first — bugs, stock}}</li>
+      <li>{{SEO}}</li>
+      <li>{{brand data}}</li>
+      <li>{{categories + promo price}}</li>
+      <li>{{redesign}}</li>
+    </ol>
+  </div>
+
+  <div class="sec">
+  <h3>Parte 1 · Puesta a punto de datos <span class="label">rápido y de alto retorno</span></h3>
+  <p class="note">Trabajo sobre los datos de la tienda — todo vía la API oficial de Tienda Nube. Cada fila ataca un punto del Informe 01.</p>
+  <table>
+    <tr><th>Acción</th><th>Qué incluye</th><th class="r">Esfuerzo</th></tr>
+    <tr><td><b>{{action}}</b></td><td>{{detail; note client-provided material if needed}}</td><td class="r"><span class="pill p-good">fácil</span></td></tr>
+    <!-- … one row per action; pills: p-good fácil / p-warn medio / p-info análisis|continuo … -->
+  </table>
+  </div>
+
+  <div class="sec">
+  <h3>Parte 2 · Rediseño del theme <span class="label">ya construido</span></h3>
+  <div class="callout">
+    <h4>Viabilidad — verificado contra la tienda real</h4>
+    <p>{{viability + the two honest caveats: client-provided assets, paid review app}}</p>
+  </div>
+  </div>
+
+  <!-- Redesign scope: one .sec per block (A componentes, B home, C ficha, D resto).
+       Each is heading + intro + table. Keep each in its own .sec so the table
+       never splits. See the ACME report for the full worked example. -->
+  <div class="sec">
+  <h4 style="font-family:'Bodoni Moda';font-size:13px;margin:5mm 0 2mm">A · Componentes globales</h4>
+  <table>
+    <tr><th>Componente</th><th>Qué pasa</th></tr>
+    <tr><td><b>{{component}}</b></td><td>{{what happens — conserve vs rebuild}}</td></tr>
+  </table>
+  </div>
+
+  <div class="sec">
+  <h3>Cómo se ejecuta — por fases</h3>
+  <div class="phase"><span class="pn">1</span><span class="pb"><b>{{phase}}.</b> {{detail}}</span></div>
+  <!-- … phases 2..n … -->
+  </div>
+
+  <div class="callout">
+    <h4>Qué NO cambia (para quedarse tranquila)</h4>
+    <ul class="plain" style="margin-top:1mm">
+      <li>La plataforma sigue siendo Tienda Nube.</li>
+      <li>El checkout, los medios de pago y los envíos quedan intactos.</li>
+      <li>Las URLs se mantienen (o se redirigen) para no perder posicionamiento.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============ 03 · INVERSIÓN ============ -->
+<div class="page section-open">
+  <div class="kicker"><span class="num">03</span><span class="label">Informe tres · Inversión</span></div>
+  <h2 class="report">Inversión.</h2>
+  <p class="lede">Qué cuesta poner todo esto en marcha y qué incluye. Un pago único cubre el trabajo del Informe 02; el costo recurrente es el plan de la plataforma, que paga la tienda.</p>
+
+  <div class="sec">
+  <h3>El servicio</h3>
+  <div class="stats" style="grid-template-columns:1.4fr 1fr">
+    <div class="stat" style="border-left:3px solid var(--bordo)"><div class="n accent">{{PRICE}}</div><div class="c">Servicio completo — pago único, todo el Informe 02</div></div>
+    <div class="stat"><div class="n" style="font-size:18px">{{PLAN}}<span style="font-size:10px">/mes</span></div><div class="c">Plan de plataforma — lo paga la tienda, no es honorario</div></div>
+  </div>
+  </div>
+
+  <div class="sec">
+  <h3>Qué incluye <span class="label">pago único</span></h3>
+  <div class="twocol">
+    <ul class="check">
+      <li><b>{{deliverable}}</b> — {{detail}}</li>
+      <!-- … list deliverables; each must map to Informe 02 work … -->
+    </ul>
+  </div>
+  <p class="note">No incluye: {{recurring plan + optional paid apps}}.</p>
+  </div>
+
+  <div class="callout">
+    <h4>Resumen de inversión</h4>
+    <table style="margin:1mm 0 0">
+      <tr><th>Concepto</th><th>Tipo</th><th class="r">Monto</th></tr>
+      <tr><td>{{service}}</td><td>Pago único</td><td class="r"><b>{{PRICE}}</b></td></tr>
+      <tr><td>{{platform plan}}</td><td>Mensual · lo paga la tienda</td><td class="r">{{PLAN}}</td></tr>
+    </table>
+  </div>
+
+  <div class="footer-note">
+    {{STORE}} · Informe preparado sobre datos reales de la tienda (store ID {{STORE_ID}}) — catálogo, ventas, clientes y configuración consultados vía la API oficial de Tienda Nube. {{DATE}}. Documento interno de trabajo.
+  </div>
+</div>
+
+</body>
+</html>

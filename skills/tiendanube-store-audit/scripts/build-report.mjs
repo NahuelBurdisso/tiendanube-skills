@@ -2,19 +2,32 @@
 // Builds a branded HTML report from ./analysis.json. Render to PDF with render.sh (headless Chrome).
 // Optional ./report.config.json: { brand:{ name, accent, accentWarm, preparedFor, locale, currencySymbol } }
 import fs from 'fs'
-const d = JSON.parse(fs.readFileSync('analysis.json', 'utf8'))
+// Dirs: flat by default ('.'); for the deep per-store layout set REPORTS_DATA=data
+// (where analysis.json lives) and REPORTS_SRC=sources (where report.html is written).
+// report.config.json is read from cwd (the reports root).
+const DATA = process.env.REPORTS_DATA || '.'
+const SRC = process.env.REPORTS_SRC || '.'
+if (SRC !== '.') fs.mkdirSync(SRC, { recursive: true })
+const d = JSON.parse(fs.readFileSync(`${DATA}/analysis.json`, 'utf8'))
 const cfg = fs.existsSync('report.config.json') ? JSON.parse(fs.readFileSync('report.config.json', 'utf8')) : {}
-const B = Object.assign({ name: d.store.name || 'TIENDA', accent: '#6B2532', accentWarm: '#B08858', preparedFor: '', locale: 'es-AR', currencySymbol: '$' }, cfg.brand || {})
+// neutral editorial palette by default (near-black ink + warm gray) — brand colors come from report.config.json
+const B = Object.assign({ name: d.store.name || 'TIENDA', accent: '#1A1A1A', accentWarm: '#8A8178', preparedFor: '', locale: 'es-AR', currencySymbol: '$' }, cfg.brand || {})
 
-const fmt = n => Math.round(n).toLocaleString(B.locale)
-// adaptive: big stores read in millions, small stores in thousands
+// HTML-escape every data/config string interpolated into markup (incl. inline SVG)
+const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+for (const k of Object.keys(B)) B[k] = esc(B[k]) // identity for sane values, neutralizes hostile config
+
+const fmt = n => { n = Number(n); return Number.isFinite(n) ? Math.round(n).toLocaleString(B.locale) : '—' }
+// adaptive: big stores read in millions, small stores in thousands; sign precedes symbol (-$5k)
 const M = n => {
-  const a = Math.abs(n), s = B.currencySymbol
-  if (a >= 1e6) return s + (n / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace('.', ',') + 'M'
-  if (a >= 1e3) return s + Math.round(n / 1e3) + 'k'
-  return s + Math.round(n)
+  n = Number(n); if (!Number.isFinite(n)) return '—'
+  const a = Math.abs(n), s = B.currencySymbol, sg = n < 0 ? '-' : ''
+  if (a >= 1e6) return sg + s + (a / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace('.', ',') + 'M'
+  if (a >= 1e3) return sg + s + Math.round(a / 1e3) + 'k'
+  return sg + s + Math.round(a)
 }
 const pc = n => Math.round(n) + '%'
+const N0 = n => Number.isFinite(Number(n)) ? Number(n) : 0 // numeric coercion for chart math
 
 // ---------- SVG charts ----------
 function vbars(data, getV, getL, { w = 540, h = 150, pad = 22, hi = null, fmtV = M } = {}) {
@@ -24,7 +37,7 @@ function vbars(data, getV, getL, { w = 540, h = 150, pad = 22, hi = null, fmtV =
     const v = getV(dd), bh = v / max * (h - pad), x = pad + i * gap + (gap - bw) / 2, y = h - bh
     const c = hi && hi(dd) ? B.accentWarm : B.accent
     s += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,bh).toFixed(1)}" fill="${c}" rx="1"/>`
-    s += `<text x="${(x + bw / 2).toFixed(1)}" y="${h + 11}" font-size="6.5" fill="#61574A" text-anchor="middle" font-family="Archivo">${getL(dd)}</text>`
+    s += `<text x="${(x + bw / 2).toFixed(1)}" y="${h + 11}" font-size="6.5" fill="#61574A" text-anchor="middle" font-family="Archivo">${esc(getL(dd))}</text>`
     if (hi && hi(dd)) s += `<text x="${(x + bw / 2).toFixed(1)}" y="${(y - 3).toFixed(1)}" font-size="6.5" fill="${B.accent}" text-anchor="middle" font-family="Bodoni Moda" font-weight="600">${fmtV(v)}</text>`
   })
   return s + '</svg>'
@@ -41,19 +54,21 @@ function hbars(data, { w = 540, rowh = 26, labelW = 175 } = {}) {
   return s + '</svg>'
 }
 
-const yearChart = vbars(d.yearly.slice(-5), y => y.rev, y => y.y, { hi: y => y === d.yearly[d.yearly.length - 1] })
+const NODATA = '<p class="note" style="padding:6mm 0">Sin datos suficientes para graficar.</p>'
+const hasSales = (d.monthly || []).length > 0 && d.lifetime.orders > 0
+const yearChart = hasSales && d.yearly.length ? vbars(d.yearly.slice(-5), y => y.rev, y => y.y, { hi: y => y === d.yearly[d.yearly.length - 1] }) : NODATA
 const monthLab = m => { const [y, mo] = m.m.split('-'); return mo + '/' + y.slice(2) }
-const maxMonth = Math.max(...d.monthly.map(m => m.rev))
-const monthChart = vbars(d.monthly, m => m.rev, monthLab, { hi: m => m.rev === maxMonth })
-const gatewayChart = hbars(d.gateway.filter(g => g.pct >= 1).map(g => ({ label: g.g, val: g.rev, right: M(g.rev) + ' · ' + pc(g.pct), color: g.g.includes('offline') || g.g.includes('transfer') ? B.accentWarm : B.accent })))
+const maxMonth = hasSales ? Math.max(...d.monthly.map(m => m.rev)) : 0
+const monthChart = hasSales ? vbars(d.monthly, m => m.rev, monthLab, { hi: m => m.rev === maxMonth }) : NODATA
+const gatewayChart = hasSales && d.gateway.length ? hbars(d.gateway.filter(g => g.pct >= 1).map(g => ({ label: esc(g.g), val: g.rev, right: M(g.rev) + ' · ' + pc(g.pct), color: g.g.includes('offline') || g.g.includes('transfer') ? B.accentWarm : B.accent }))) : NODATA
 const leakChart = hbars([
-  { label: 'Carritos abandonados /año', val: d.leaks.abandoned.annualized, right: M(d.leaks.abandoned.annualized) },
-  { label: 'Pedidos sin pagar (histórico)', val: d.leaks.pending.val, right: M(d.leaks.pending.val) },
-  { label: 'Cancelados (histórico)', val: d.leaks.cancelled.val, right: M(d.leaks.cancelled.val) },
+  { label: 'Carritos abandonados /año', val: N0(d.leaks.abandoned.annualized), right: M(d.leaks.abandoned.annualized) },
+  { label: 'Pedidos sin pagar (histórico)', val: N0(d.leaks.pending.val), right: M(d.leaks.pending.val) },
+  { label: 'Cancelados (histórico)', val: N0(d.leaks.cancelled.val), right: M(d.leaks.cancelled.val) },
 ])
-const leverChart = hbars(d.levers.map(l => ({ label: l.name.length > 36 ? l.name.slice(0, 35) + '…' : l.name, val: l.val, right: M(l.val) })), { rowh: 24 })
-const leverRows = d.levers.map(l => `<tr><td><b>${l.name}</b><br><span class="note">${l.assume}</span></td><td class="r">${M(l.val)}</td><td><span class="pill p-${l.eff === 'Bajo' ? 'good' : 'warn'}">${l.eff}</span></td></tr>`).join('')
-const riskRows = d.levers.map(l => `<tr><td>${l.name.replace(/ \(.*\)/, '').slice(0,40)}</td><td>${l.assume}</td><td><span class="pill p-${l.risk === 'alto' ? 'bad' : l.risk === 'medio' ? 'warn' : 'good'}">${l.risk}</span></td></tr>`).join('')
+const leverChart = d.levers.length ? hbars(d.levers.map(l => ({ label: esc(l.name.length > 36 ? l.name.slice(0, 35) + '…' : l.name), val: l.val, right: M(l.val) })), { rowh: 24 }) : NODATA
+const leverRows = d.levers.map(l => `<tr><td><b>${esc(l.name)}</b><br><span class="note">${esc(l.assume)}</span></td><td class="r">${M(l.val)}</td><td><span class="pill p-${l.eff === 'Bajo' ? 'good' : 'warn'}">${esc(l.eff)}</span></td></tr>`).join('')
+const riskRows = d.levers.map(l => `<tr><td>${esc(l.name.replace(/ \(.*\)/, '').slice(0,40))}</td><td>${esc(l.assume)}</td><td><span class="pill p-${l.risk === 'alto' ? 'bad' : l.risk === 'medio' ? 'warn' : 'good'}">${esc(l.risk)}</span></td></tr>`).join('')
 
 const ab = d.leaks.abandoned, p = d.products, c = d.customers
 const html = `<!DOCTYPE html><html lang="${B.locale}"><head><meta charset="UTF-8">
@@ -81,6 +96,7 @@ h2.report{font-size:29px;line-height:1.05;margin-bottom:3mm}
 .lede{font-size:11.5px;color:var(--muted);max-width:155mm;line-height:1.6;margin-bottom:6mm}
 h3{font-size:15px;margin:7mm 0 3mm;padding-bottom:2mm;border-bottom:1px solid var(--line)}h3 .label{float:right;padding-top:4px}
 p{margin-bottom:2.5mm}.note{color:var(--muted)}
+.sec{break-inside:avoid;page-break-inside:avoid}.sec h3{margin-top:0}/* wrap heading+table/stats/list in <div class="sec"> so a section never splits across a page jump */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm;margin:4mm 0 6mm}
 .stat{background:var(--surface);border:1px solid var(--line);padding:4mm}
 .stat .n{font-family:'Bodoni Moda';font-size:20px;color:var(--ink);line-height:1}.stat .n.accent{color:var(--accent)}
@@ -109,8 +125,8 @@ ul.check{list-style:none}ul.check li{position:relative;padding-left:7mm;margin-b
     <p class="sub">Análisis sobre datos reales de la tienda: crecimiento, de dónde entra el dinero, qué se fuga, y las palancas concretas para facturar más. Cada número trae su supuesto.</p>
     <div class="meta">
       ${B.preparedFor ? `<div><span class="label">Para</span><div style="font-size:12px;margin-top:2mm">${B.preparedFor}</div></div>` : ''}
-      <div><span class="label">Tienda</span><div style="font-size:12px;margin-top:2mm">${(d.store.domain||'').replace(/^https?:\/\//,'')}</div></div>
-      <div><span class="label">Generado</span><div style="font-size:12px;margin-top:2mm">${d.generatedAt.slice(0,10)}</div></div>
+      <div><span class="label">Tienda</span><div style="font-size:12px;margin-top:2mm">${esc((d.store.domain||'').replace(/^https?:\/\//,''))}</div></div>
+      <div><span class="label">Generado</span><div style="font-size:12px;margin-top:2mm">${esc(d.generatedAt.slice(0,10))}</div></div>
     </div>
   </div>
 </div>
@@ -142,9 +158,10 @@ ul.check{list-style:none}ul.check li{position:relative;padding-left:7mm;margin-b
   <h2 class="report">La plata que hoy se escapa.</h2>
   <p class="lede">Las canillas abiertas. La más grande suele ser recurrente: carritos que se abandonan mes a mes.</p>
   <div class="chartbox"><div class="ct">Fugas de ingreso — abandonados anualizados vs. acumulado histórico</div>${leakChart}</div>
+  ${ab.unavailable ? '<p class="note"><b>Carritos abandonados: dato no disponible (permiso /checkouts faltante).</b> El token no tiene acceso a los checkouts, así que esta fuga no pudo medirse — no significa que sea cero.</p>' : ''}
   <table>
     <tr><th>Fuga</th><th>Ventana</th><th class="r">Monto</th><th>Recuperable</th></tr>
-    <tr><td><b>Carritos abandonados</b></td><td>${ab.n} en ~${ab.windowDays} días</td><td class="r">${M(ab.val)} · ${M(ab.annualized)}/año</td><td><span class="pill p-good">${ab.withEmail}/${ab.n} con email</span></td></tr>
+    <tr><td><b>Carritos abandonados</b></td><td>${ab.unavailable ? '—' : `${ab.n} en ~${ab.windowDays} días`}</td><td class="r">${ab.unavailable ? 'dato no disponible' : `${M(ab.val)} · ${M(ab.annualized)}/año`}</td><td><span class="pill ${ab.unavailable ? 'p-warn">sin permiso /checkouts' : `p-good">${ab.withEmail}/${ab.n} con email`}</span></td></tr>
     <tr><td><b>Pedidos sin pagar</b></td><td>${d.leaks.pending.n} pedidos</td><td class="r">${M(d.leaks.pending.val)}</td><td><span class="pill p-warn">recordatorio</span></td></tr>
     <tr><td><b>Cancelados</b></td><td>${d.leaks.cancelled.n} pedidos</td><td class="r">${M(d.leaks.cancelled.val)}</td><td><span class="pill p-info">parcial</span></td></tr>
   </table>
@@ -167,7 +184,7 @@ ul.check{list-style:none}ul.check li{position:relative;padding-left:7mm;margin-b
     <div class="stat"><div class="n">${fmt(p.total)}</div><div class="c">Productos · ${p.published} publicados</div></div>
     <div class="stat"><div class="n ${p.nullp?'accent':''}">${p.nullp}</div><div class="c">Precios en ${B.currencySymbol}0 (bug visible)</div></div>
     <div class="stat"><div class="n ${p.deadPub?'accent':''}">${p.deadPub}</div><div class="c">Publicados sin stock (vidriera muerta)</div></div>
-    <div class="stat"><div class="n ${p.noSeoDescription===p.total?'accent':''}">${p.noSeoTitle}/${p.total}</div><div class="c">Sin título SEO · ${p.noSeoDescription} sin descripción</div></div>
+    <div class="stat"><div class="n ${p.noSeoTitle===p.total?'accent':''}">${p.noSeoTitle}/${p.total}</div><div class="c">Sin título SEO · ${p.noSeoDescription} sin descripción</div></div>
   </div>
   <table>
     <tr><th>Punto</th><th class="r">Dato</th><th>Lectura</th></tr>
@@ -177,7 +194,7 @@ ul.check{list-style:none}ul.check li{position:relative;padding-left:7mm;margin-b
     <tr><td>Peso y medidas (cotización de envío)</td><td class="r">${p.weightDims}/${p.total}</td><td>${p.total-p.weightDims} cotizan mal el envío</td></tr>
     <tr><td>Capital inmovilizado en stock</td><td class="r">${M(p.invValue)}</td><td>Lo que no rota es caja dormida</td></tr>
     <tr><td>Categorías</td><td class="r">${d.categories.total}</td><td>${d.categories.topLevel} de primer nivel</td></tr>
-    <tr><td>Cupones (histórico)</td><td class="r">${d.coupons.total} · ${d.coupons.used} usos</td><td>${d.coupons.total < 6 ? 'Promociones sin explotar' : 'OK'}</td></tr>
+    <tr><td>Cupones (histórico)</td><td class="r">${d.coupons.unavailable ? '—' : `${d.coupons.total} · ${d.coupons.used} usos`}</td><td>${d.coupons.unavailable ? 'Dato no disponible (permiso /coupons faltante)' : d.coupons.total < 6 ? 'Promociones sin explotar' : 'OK'}</td></tr>
   </table>
 </div>
 
@@ -187,17 +204,17 @@ ul.check{list-style:none}ul.check li{position:relative;padding-left:7mm;margin-b
   <p class="lede">Para que cada número sea defendible: origen del dato y qué se asumió.</p>
   <h3>Origen de los datos</h3>
   <ul class="check">
-    <li>Todo sale de la <b>API oficial de Tienda Nube</b> (store ID ${d.store.id}), consultada el ${d.generatedAt.slice(0,10)}.</li>
+    <li>Todo sale de la <b>API oficial de Tienda Nube</b> (store ID ${esc(d.store.id)}), consultada el ${esc(d.generatedAt.slice(0,10))}.</li>
     <li><b>Facturación</b> = suma de <code>total</code> con <code>payment_status = paid</code> (${fmt(d.lifetime.orders)} pedidos = ${M(d.lifetime.rev)}).</li>
     <li><b>Run-rate ~${M(d.runRate)}</b> = facturación de los últimos 12 meses.</li>
-    <li><b>Carritos abandonados</b> = checkouts sin <code>completed_at</code>: ${ab.n} en ~${ab.windowDays} días, anualizado.</li>
+    <li><b>Carritos abandonados</b> = ${ab.unavailable ? 'dato no disponible (permiso /checkouts faltante); la palanca se omitió del informe.' : `checkouts sin <code>completed_at</code>: ${ab.n} en ~${ab.windowDays} días, anualizado.`}</li>
   </ul>
   <h3>Supuesto y riesgo de cada palanca</h3>
   <table><tr><th>Palanca</th><th>Supuesto clave</th><th>Riesgo</th></tr>${riskRows}</table>
   <p class="note">Números <b>conservadores y aditivos</b>: no todas se capturan al 100% ni de inmediato. Las de riesgo alto (precio) se prueban con un test, no a ciegas.</p>
-  <div class="footer-note">${B.name} · Informe sobre datos reales (store ID ${d.store.id}), API oficial de Tienda Nube, ${d.generatedAt.slice(0,10)}. Montos de oportunidad = estimaciones con supuestos explícitos, no ingresos garantizados.</div>
+  <div class="footer-note">${B.name} · Informe sobre datos reales (store ID ${esc(d.store.id)}), API oficial de Tienda Nube, ${esc(d.generatedAt.slice(0,10))}. Montos de oportunidad = estimaciones con supuestos explícitos, no ingresos garantizados.</div>
 </div>
 
 </body></html>`
-fs.writeFileSync('report.html', html)
-console.log('✓ report.html written — render with render.sh')
+fs.writeFileSync(`${SRC}/report.html`, html)
+console.log(`✓ ${SRC}/report.html written — render with render.sh`)

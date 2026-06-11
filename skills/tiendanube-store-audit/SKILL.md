@@ -40,9 +40,17 @@ node build-report.mjs   # analysis.json → report.html (branded, SVG charts)
 ```
 One run covers operative + financial.
 
+**Deep per-store layout** (when this store is a full project under `~/Desktop/Projects/<store>/reports/` with `scripts/ data/ sources/ deliverables/` — see the `tiendanube-stores` skill): keep the scripts in `reports/scripts/`, `.env` + `report.config.json` at the `reports/` root, and **run from that root** so the env loader finds `.env`. Point the scripts at the subfolders via env vars (default `.` = the flat layout above):
+```bash
+cd ~/Desktop/Projects/<store>/reports
+REPORTS_DATA=data node scripts/analyze.mjs               # → data/analysis.json
+REPORTS_DATA=data REPORTS_SRC=sources node scripts/build-report.mjs   # data/analysis.json → sources/report.html
+./scripts/render.sh sources/report.html deliverables/report.pdf       # render.sh takes [in] [out]
+```
+
 **Two mandatory checks (don't skip):**
 1. **Before** building — read `analysis.json` and sanity-check against the store: is `runRate` plausible? Is the `transferGatewayKeys` gateway actually the discounted one? Does `leaks.abandoned.windowDays` look sane (the API returns only a recent window)?
-2. **After** rendering — confirm the PDF page count and that the brand/accent landed (the cover shows the store name + headline upside). Then hand it over.
+2. **After** rendering — confirm the PDF page count and that the brand/accent landed (the cover shows the store name + headline upside). **Rasterize and eyeball every page for sections cut by a page jump** (`pdftoppm -png -r 90 report.pdf /tmp/pg && open /tmp/pg-*.png`); fix by wrapping/tightening `.sec` blocks (see `reference/report-structure.md` → Page-break discipline). Then hand it over.
 
 Extra OAuth vars in `.env` (`TIENDANUBE_APP_ID`, `CLIENT_SECRET`) are ignored — only the token + store_id are read.
 
@@ -53,8 +61,11 @@ Copy `scripts/report.config.example.json` → `report.config.json` and edit. Two
 
 Money formatting is adaptive: stores under ~$1M/yr render in `k`, larger in `M` — no config needed.
 
-## What the report contains
-Cover (headline upside) → **00** thesis (run-rate vs upside) → **01** motor (revenue by year/month, payment mix) → **02** leaks (abandoned/pending/cancelled) → **03** levers table (the core) → **04** operative/catalog state → **05** assumptions & risk. See `reference/report-structure.md` for the section model and the **opportunity-lever framework** (formulas).
+## Two report shapes
+- **Financial / lever report (automated):** `build-report.mjs` → Cover (headline upside) → **00** thesis → **01** motor (revenue by year/month, payment mix) → **02** leaks → **03** levers table (the core) → **04** operative/catalog state → **05** assumptions & risk.
+- **Strategic / narrative report (hand-authored):** diagnosis + plan + investment, in three informes — **01 Estado actual** (diagnosis only) · **02 Trabajo a realizar** (data puesta-a-punto + theme redesign) · **03 Inversión**. Start from **`assets/narrative-report-template.html`** (copy → `report.html`, recolor `:root`, fill from `analysis.json`), then `./render.sh`. Same CSS/brand tokens as the automated one.
+
+See `reference/report-structure.md` for the section models, the **opportunity-lever framework** (formulas), the **three-informe narrative structure**, and the **page-break discipline** (mandatory `.sec` wrapping + rasterize-to-verify).
 
 ## The opportunity levers (formula-based, in analyze.mjs)
 | Lever | Formula (conservative) |

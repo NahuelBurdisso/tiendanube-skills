@@ -1,9 +1,9 @@
 {
   "brand": {
-    "name": "ACME",
-    "accent": "#6B2532",
-    "accentWarm": "#B08858",
-    "preparedFor": "la dueña Grandi",
+    "name": "MI MARCA",
+    "accent": "#1F3A5F",
+    "accentWarm": "#C0A062",
+    "preparedFor": "Nombre del cliente",
     "locale": "es-AR",
     "currencySymbol": "$"
   },
